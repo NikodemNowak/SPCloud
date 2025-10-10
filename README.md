@@ -46,3 +46,18 @@ http://<IP_RPi>:8000
 ```
 
 ---
+
+## 5. Konfiguracja zmiennych środowiskowych
+
+Utwórz plik `.env` w głównym katalogu projektu i dodaj następujące zmienne:
+
+```bash
+POSTGRES_USER=user
+POSTGRES_PASSWORD=secret
+POSTGRES_DB=mydb
+POSTGRES_PORT=5434
+DATABASE_URL=postgresql://user:secret@db:5432/mydb
+```
+
+
+---
