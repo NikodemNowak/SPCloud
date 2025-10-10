@@ -1,12 +1,14 @@
 ## 1. Utworzenie i aktywacja wirtualnego środowiska
 
 ### Linux / RPi / macOS:
+
 ```bash
 python3 -m venv venv
 source venv/bin/activate
 ```
 
 ### Windows:
+
 ```bash
 python -m venv venv
 venv\Scripts\activate
@@ -36,28 +38,34 @@ pip install -r requirements.txt
 ## 4. Uruchomienie aplikacji
 
 Przykładowy serwer FastAPI:
+
 ```bash
-uvicorn main:app --host 0.0.0.0 --port 8000
+uvicorn backend.app.main:app --host 0.0.0.0 --port 8000
 ```
 
 Aplikacja będzie dostępna na:
+
 ```
 http://<IP_RPi>:8000
 ```
 
 ---
 
-## 5. Konfiguracja zmiennych środowiskowych
+## 5. Uruchamianie aplikacji przez Docker Compose
 
-Utwórz plik `.env` w głównym katalogu projektu i dodaj następujące zmienne:
+Jeśli nie zmieniałeś pliku `Dockerfile` ani `requirements.txt`, możesz pominąć opcję `--build` (nie ma sensu czekać na
+przebudowę).
+
+Uruchomienie aplikacji w tle z budowaniem obrazu:
 
 ```bash
-POSTGRES_USER=user
-POSTGRES_PASSWORD=secret
-POSTGRES_DB=mydb
-POSTGRES_PORT=5434
-DATABASE_URL=postgresql://user:secret@db:5432/mydb
+docker compose up --build -d
 ```
 
+Zatrzymanie i usunięcie kontenerów (obraz zostaje):
+
+```bash
+docker compose down
+```
 
 ---
