@@ -42,6 +42,18 @@ class User(Base):
     user_type = Column(String)  # 'admin', 'regular'
 
     files = relationship("FileStorage", back_populates="user")
+    refresh_tokens = relationship("RefreshToken", back_populates="user", cascade="all, delete-orphan")
+
+
+class RefreshToken(Base):
+    __tablename__ = "refresh_tokens"
+    id = Column(UUID(as_uuid=True), primary_key=True, index=True)
+    user_username = Column(String, ForeignKey("users.username", ondelete="CASCADE"), nullable=False)
+    token = Column(String, nullable=False, index=True, unique=True)
+    expires_at = Column(TIMESTAMP(timezone=True), nullable=False)
+    created_at = Column(TIMESTAMP(timezone=True))
+
+    user = relationship("User", back_populates="refresh_tokens")
 
 
 class LogEntry(Base):
