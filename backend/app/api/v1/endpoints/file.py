@@ -1,7 +1,7 @@
-from fastapi import APIRouter, UploadFile, File, Form, HTTPException
-from fastapi.responses import FileResponse
 from typing import Optional
 
+from fastapi import APIRouter, UploadFile, File, Form, HTTPException
+from fastapi.responses import FileResponse
 from services.file_service import FileService
 
 router = APIRouter(prefix="/files", tags=["files"])
@@ -10,8 +10,8 @@ file_service = FileService()
 
 @router.post("/upload")
 async def upload_file(
-    file: UploadFile = File(...),
-    logical_name: Optional[str] = Form(None)
+        file: UploadFile = File(...),
+        logical_name: Optional[str] = Form(None)
 ):
     """
     Endpoint for uploading files

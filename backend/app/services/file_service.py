@@ -1,5 +1,6 @@
 import os
 from typing import List, Optional
+
 import aiofiles
 from fastapi import UploadFile
 
@@ -56,4 +57,3 @@ class FileService:
             "size": os.path.getsize(file_path),
             "path": file_path
         }
-

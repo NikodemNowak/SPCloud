@@ -3,7 +3,7 @@ from contextlib import asynccontextmanager
 from api.v1.api import api_router
 from init_db import init_db
 
-# Sepecial object to manage the lifespan of the app
+# Special object to manage the lifespan of the app
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     print("Initializing application...")
