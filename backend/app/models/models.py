@@ -1,5 +1,5 @@
 from sqlalchemy.orm import declarative_base
-from sqlalchemy import Column, Integer, String, LargeBinary
+from sqlalchemy import Column, Integer, String, LargeBinary, ForeignKey
 Base = declarative_base()
 
 class FileStorage(Base):
@@ -10,11 +10,10 @@ class FileStorage(Base):
     content_type = Column(String)
     size = Column(Integer)
     data = Column(LargeBinary)
-    owner = Column(String, foregin_key="users.username")
+    owner = Column(String, ForeignKey("users.username"))
 
 class User(Base):
     __tablename__ = "users"
     id = Column(Integer, primary_key=True, index=True)
     username = Column(String, unique=True, index=True)
     hashed_password = Column(String)
-

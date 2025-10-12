@@ -1,10 +1,23 @@
-import os
+from fastapi import FastAPI
+from contextlib import asynccontextmanager
+from api.v1.api import api_router
+from init_db import init_db
 
-import aiofiles
-from fastapi import FastAPI, UploadFile, File, Form
-from fastapi.responses import FileResponse
 
-app = FastAPI()
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    print("Initializing application...")
+    init_db()
+    yield # yield is used to separate startup and shutdown code
+    print("Shutting down application...")
+
+
+app = FastAPI(
+    title="SPCloud API",
+    description="API to manage files in SPCloud",
+    version="1.0.0",
+    lifespan=lifespan
+)
 
 
 @app.get("/")
@@ -12,25 +25,5 @@ async def root():
     return {"status": "ok", "message": "Hello World"}
 
 
-@app.post("/upload")
-async def upload_file(file: UploadFile = File(...), logical_name: str = Form(None)):
-    file_path = os.path.join('/app/files', logical_name or file.filename)
-    async with aiofiles.open(file_path, 'wb') as out_file:
-        while content := await file.read(1024 * 1024):  # czytamy w kawałkach 1MB
-            await out_file.write(content)
-    response = {"filename": file.filename, "content_type": file.content_type, "file_path": file_path}
-    return response
-
-@app.get("/download/{file_name}")
-async def download_file(file_name: str):
-    file_path = os.path.join('/app/files', file_name)
-    if not os.path.exists(file_path):
-        responseError = {'error': 'File not found'}
-        return responseError
-
-    return FileResponse(file_path, media_type="application/octet-stream", filename=file_name)
-
-@app.get("/files")
-async def list_files():
-    files = os.listdir('/app/files')
-    return {"files": files}
+# Turning on the API router
+app.include_router(api_router, prefix="/api/v1")
