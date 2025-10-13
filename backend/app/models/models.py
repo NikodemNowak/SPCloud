@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, ForeignKey, Boolean
+from sqlalchemy import Column, Integer, String, ForeignKey, Boolean, UniqueConstraint
 from sqlalchemy.dialects.postgresql import UUID, TIMESTAMP
 from sqlalchemy.orm import declarative_base, relationship
 
@@ -19,6 +19,10 @@ class FileStorage(Base):
 
     versions = relationship("FileVersion", back_populates="file", cascade="all, delete-orphan")
     user = relationship("User", back_populates="files")
+
+    __table_args__ = (
+        UniqueConstraint('owner', 'name', name='uq_owner_filename'),
+    )
 
 
 class FileVersion(Base):
