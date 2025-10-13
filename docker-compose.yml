@@ -11,9 +11,22 @@ services:
       - "8000:8000"
     volumes:
       - ./backend/app:/app        # na czas developmentu kod widoczny w kontenerze
-      - files_data:/app/files     # miejsce na uploadowane pliki
     depends_on:
       - db
+      - minio
+
+  minio:
+    image: minio/minio:latest
+    container_name: minio
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: admin
+      MINIO_ROOT_PASSWORD: supersecret
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio_data:/data
 
   db:
     image: postgres:18
@@ -27,4 +40,4 @@ services:
 
 volumes:
   db_data:
-  files_data:
+  minio_data:

@@ -1,7 +1,10 @@
 from typing import Optional
 
+from dependencies import get_current_user
 from fastapi import APIRouter, UploadFile, File, Form, HTTPException
+from fastapi import Depends
 from fastapi.responses import FileResponse
+from models.models import User
 from services.file_service import FileService
 
 router = APIRouter(prefix="/files", tags=["files"])
@@ -11,6 +14,7 @@ file_service = FileService()
 @router.post("/upload")
 async def upload_file(
         file: UploadFile = File(...),
+        user: User = Depends(get_current_user),
         logical_name: Optional[str] = Form(None)
 ):
     """
@@ -20,7 +24,7 @@ async def upload_file(
     - **logical_name**: Optional logical name of the file
     """
     try:
-        result = await file_service.save_file(file, logical_name)
+        result = await file_service.save_file(file=file, username=user.username, logical_name=logical_name)
         return result
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error uploading file: {str(e)}")

@@ -8,7 +8,7 @@ from init_db import init_db
 async def lifespan(app: FastAPI):
     print("Initializing application...")
     # Initialize the database
-    init_db()
+    await init_db()
     # yield is used to separate startup and shutdown code
     yield
     print("Shutting down application...")

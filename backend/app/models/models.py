@@ -39,7 +39,7 @@ class User(Base):
     __tablename__ = "users"
     username = Column(String, primary_key=True, index=True)
     hashed_password = Column(String)
-    user_type = Column(String)  # 'admin', 'regular'
+    user_type = Column(String, default="regular")  # 'admin', 'regular'
 
     files = relationship("FileStorage", back_populates="user")
     refresh_tokens = relationship("RefreshToken", back_populates="user", cascade="all, delete-orphan")
