@@ -17,6 +17,12 @@
 
 		const MIN_PASSWORD_LENGTH = 2;
 
+        registerFailedUsernameTaken = false;
+        registerFailedUsernameIsEmpty = false;
+        registerFailedPasswordsNotSame = false;
+        registerFailedPasswordIsEmpty = false;
+        registerFailedPasswordTooShort = false;
+
 		if (username.length === 0) {
 			registerFailedUsernameIsEmpty = true;
 			console.error('Username is empty');
