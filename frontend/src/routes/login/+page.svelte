@@ -71,7 +71,7 @@
 		width: 100%;
 		min-height: 100vh;
 		min-height: 100dvh; /* Dynamic viewport height for mobile */
-		background-image: url('$lib/assets/background.jpg');
+		background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
 		background-size: cover;
 		background-position: center;
 		background-repeat: no-repeat;

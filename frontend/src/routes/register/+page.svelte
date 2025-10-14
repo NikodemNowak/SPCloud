@@ -56,7 +56,7 @@
 	}
 </script>
 
-<div class="background-container">
+<div class="register-container">
 	<div class="login-panel">
 		<div class="title">
 			<h1>SPCloud</h1>
@@ -117,11 +117,11 @@
 </div>
 
 <style>
-    .background-container {
+    .register-container {
         width: 100%;
         min-height: 100vh;
         min-height: 100dvh; /* Dynamic viewport height for mobile */
-        background-image: url('$lib/assets/background.jpg');
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
         background-size: cover;
         background-position: center;
         background-repeat: no-repeat;
@@ -263,7 +263,7 @@
 
     /* Phone */
     @media (max-width: 768px) {
-        .background-container {
+        .register-container {
             padding: 15px;
             justify-content: center;
             align-items: center;
@@ -331,7 +331,7 @@
 
     /* Small phones */
     @media (max-width: 480px) {
-        .background-container {
+        .register-container {
             padding: 10px;
             min-height: 100vh;
             min-height: 100svh;
@@ -389,7 +389,7 @@
 
     /* Very small phones */
     @media (max-width: 360px) {
-        .background-container {
+        .register-container {
             padding: 8px;
             min-height: 100vh;
             min-height: 100svh;
@@ -425,7 +425,7 @@
 
     /* Tablet and small desktop */
     @media (min-width: 769px) and (max-width: 1199px) {
-        .background-container {
+        .register-container {
             justify-content: center;
             padding: 20px;
         }
@@ -433,7 +433,7 @@
 
     /* Desktop */
     @media (min-width: 1200px) {
-        .background-container {
+        .register-container {
             justify-content: center;
         }
     }

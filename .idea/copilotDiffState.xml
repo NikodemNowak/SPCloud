@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="CopilotDiffPersistence">
+    <option name="pendingDiffs">
+      <map>
+        <entry key="$PROJECT_DIR$/docker-compose.dev.yml">
+          <value>
+            <PendingDiffInfo>
+              <option name="filePath" value="$PROJECT_DIR$/docker-compose.dev.yml" />
+              <option name="originalContent" value="# Dockerfile dla środowiska deweloperskiego z hot-reload&#10;&#10;FROM node:22-alpine&#10;&#10;WORKDIR /app&#10;&#10;# Instalacja zależności&#10;COPY package.json package-lock.json* ./&#10;RUN npm ci --prefer-offline --no-audit&#10;&#10;# Kopiowanie plików źródłowych&#10;COPY . .&#10;&#10;# Expose portu&#10;EXPOSE 5173&#10;&#10;# Zmienne środowiskowe dla dev&#10;ENV NODE_ENV=development&#10;&#10;# Uruchomienie w trybie dev z hot-reload&#10;CMD [&quot;npm&quot;, &quot;run&quot;, &quot;dev&quot;, &quot;--&quot;, &quot;--host&quot;, &quot;0.0.0.0&quot;]&#10;&#10;" />
+              <option name="updatedContent" value="# Docker Compose dla środowiska deweloperskiego&#10;&#10;services:&#10;  frontend:&#10;    build:&#10;      context: ./frontend&#10;      dockerfile: Dockerfile.dev&#10;    container_name: spcloud_frontend_dev&#10;    restart: unless-stopped&#10;    ports:&#10;      - &quot;${FRONTEND_PORT:-5173}:5173&quot;&#10;    volumes:&#10;      - ./frontend:/app&#10;      - /app/node_modules&#10;    environment:&#10;      - NODE_ENV=development&#10;      - PUBLIC_API_URL=${PUBLIC_API_URL:-http://localhost:8000}&#10;    depends_on:&#10;      - backend&#10;    networks:&#10;      - spcloud_network&#10;&#10;  backend:&#10;    build:&#10;      context: ./backend&#10;    container_name: fastapi_backend&#10;    restart: unless-stopped&#10;    env_file: .env&#10;    ports:&#10;      - &quot;8000:8000&quot;&#10;    volumes:&#10;      - ./backend/app:/app&#10;    depends_on:&#10;      - db&#10;      - minio&#10;    networks:&#10;      - spcloud_network&#10;&#10;  minio:&#10;    image: minio/minio:latest&#10;    container_name: minio&#10;    command: server /data --console-address &quot;:9001&quot;&#10;    restart: unless-stopped&#10;    environment:&#10;      MINIO_ROOT_USER: admin&#10;      MINIO_ROOT_PASSWORD: supersecret&#10;    ports:&#10;      - &quot;9000:9000&quot;&#10;      - &quot;9001:9001&quot;&#10;    volumes:&#10;      - minio_data:/data&#10;    networks:&#10;      - spcloud_network&#10;&#10;  db:&#10;    image: postgres:18&#10;    container_name: postgres_db&#10;    restart: unless-stopped&#10;    env_file: .env&#10;    ports:&#10;      - &quot;${POSTGRES_PORT:-5432}:5432&quot;&#10;    volumes:&#10;      - db_data:/var/lib/postgresql/data&#10;    networks:&#10;      - spcloud_network&#10;&#10;volumes:&#10;  db_data:&#10;  minio_data:&#10;&#10;networks:&#10;  spcloud_network:&#10;    driver: bridge" />
+            </PendingDiffInfo>
+          </value>
+        </entry>
+        <entry key="$PROJECT_DIR$/frontend/Dockerfile.dev">
+          <value>
+            <PendingDiffInfo>
+              <option name="filePath" value="$PROJECT_DIR$/frontend/Dockerfile.dev" />
+              <option name="updatedContent" value="# Dockerfile dla środowiska deweloperskiego z hot-reload&#10;&#10;FROM node:22-alpine&#10;&#10;WORKDIR /app&#10;&#10;# Instalacja zależności&#10;COPY package.json package-lock.json* ./&#10;RUN npm ci --prefer-offline --no-audit&#10;&#10;# Kopiowanie plików źródłowych&#10;COPY . .&#10;&#10;# Expose portu&#10;EXPOSE 5173&#10;&#10;# Zmienne środowiskowe dla dev&#10;ENV NODE_ENV=development&#10;&#10;# Uruchomienie w trybie dev z hot-reload&#10;CMD [&quot;npm&quot;, &quot;run&quot;, &quot;dev&quot;, &quot;--&quot;, &quot;--host&quot;, &quot;0.0.0.0&quot;]&#10;" />
+            </PendingDiffInfo>
+          </value>
+        </entry>
+      </map>
+    </option>
+  </component>
+</project>

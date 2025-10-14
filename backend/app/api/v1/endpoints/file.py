@@ -4,6 +4,7 @@ from db.database import get_db
 from dependencies import get_current_user
 from fastapi import APIRouter, UploadFile, File, Form, HTTPException
 from fastapi import Depends, status
+from fastapi.responses import StreamingResponse
 from models.models import User
 from services.file_service import FileService
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -38,3 +39,37 @@ async def list_files(db: AsyncSession = Depends(get_db),
     """
     files = await FileService(db).list_files(username=user.username)
     return {"files": files}
+
+
+@router.get("/{file_id}/download", status_code=status.HTTP_200_OK)
+async def download_file(
+    file_id: str,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Endpoint to download a file by ID
+
+    - **file_id**: UUID of the file to download
+    """
+    file_obj, filename = await FileService(db).get_file(file_id=file_id, username=user.username)
+
+    return StreamingResponse(
+        file_obj,
+        media_type="application/octet-stream",
+        headers={"Content-Disposition": f"attachment; filename={filename}"}
+    )
+
+
+@router.delete("/{file_id}", status_code=status.HTTP_200_OK)
+async def delete_file(
+    file_id: str,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Endpoint to delete a file by ID
+
+    - **file_id**: UUID of the file to delete
+    """
+    return await FileService(db).delete_file(file_id=file_id, username=user.username)

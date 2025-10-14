@@ -427,7 +427,7 @@
 	.background-container {
 		width: 100vw;
 		height: 100vh;
-		background-image: url('$lib/assets/background.jpg');
+		background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
 		background-size: cover;
 		background-position: center;
 		display: flex;
