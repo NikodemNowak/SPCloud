@@ -20,6 +20,24 @@
             </PendingDiffInfo>
           </value>
         </entry>
+        <entry key="$PROJECT_DIR$/frontend/src/app.html">
+          <value>
+            <PendingDiffInfo>
+              <option name="filePath" value="$PROJECT_DIR$/frontend/src/app.html" />
+              <option name="originalContent" value="&lt;!doctype html&gt;&#10;&lt;html lang=&quot;en&quot;&gt;&#10;&#9;&lt;head&gt;&#10;&#9;&#9;&lt;meta charset=&quot;utf-8&quot; /&gt;&#10;&#9;&#9;&lt;meta name=&quot;viewport&quot; content=&quot;width=device-width, initial-scale=1&quot; /&gt;&#10;&#9;&#9;&lt;link rel=&quot;icon&quot; type=&quot;image/x-icon&quot; href=&quot;/favicon.ico&quot; /&gt;&#10;&#9;&#9;&lt;link rel=&quot;stylesheet&quot; href=&quot;/app.css&quot;&gt;&#10;&#9;&#9;%sveltekit.head%&#10;&#9;&lt;/head&gt;&#10;&#9;&lt;body data-sveltekit-preload-data=&quot;hover&quot; style=&quot;margin: 0; background: url('/background.jpg') no-repeat center center fixed; background-size: cover;&quot;&gt;&#10;&#9;&#9;&lt;div style=&quot;display: contents&quot;&gt;%sveltekit.body%&lt;/div&gt;&#10;&#9;&lt;/body&gt;&#10;&lt;/html&gt;&#10;" />
+              <option name="updatedContent" value="&lt;!doctype html&gt;&#10;&lt;html lang=&quot;en&quot;&gt;&#10;&#9;&lt;head&gt;&#10;&#9;&#9;&lt;meta charset=&quot;utf-8&quot; /&gt;&#10;&#9;&#9;&lt;meta name=&quot;viewport&quot; content=&quot;width=device-width, initial-scale=1&quot; /&gt;&#10;&#9;&#9;&lt;link rel=&quot;icon&quot; type=&quot;image/x-icon&quot; href=&quot;/favicon.ico&quot; /&gt;&#10;&#9;&#9;&lt;link rel=&quot;stylesheet&quot; href=&quot;/app.css&quot;&gt;&#10;&#9;&#9;%sveltekit.head%&#10;&#9;&lt;/head&gt;&#10;&#9;&lt;body data-sveltekit-preload-data=&quot;hover&quot; style=&quot;margin: 0; background: url('/background.jpg') no-repeat center center fixed; background-size: cover;&quot;&gt;&#10;&#9;&#9;&lt;div style=&quot;display: contents&quot;&gt;%sveltekit.body%&lt;/div&gt;&#10;&#9;&lt;/body&gt;&#10;&lt;/html&gt;" />
+            </PendingDiffInfo>
+          </value>
+        </entry>
+        <entry key="$PROJECT_DIR$/frontend/static/app.css">
+          <value>
+            <PendingDiffInfo>
+              <option name="filePath" value="$PROJECT_DIR$/frontend/static/app.css" />
+              <option name="originalContent" value="&#9;:root {&#10;&#9;&#9;--primary-bg: rgba(26, 22, 53, 0.7);&#10;&#9;&#9;--sidebar-bg: rgba(20, 16, 45, 0.5);&#10;        --dropdown-bg: rgba(20, 16, 45, 0.9);&#10;&#9;&#9;--border-color: rgba(140, 98, 255, 0.2);&#10;&#9;&#9;--primary-purple: rgba(157, 115, 255, 1);&#10;&#9;&#9;--text-primary: rgba(224, 216, 255, 1);&#10;&#9;&#9;--text-secondary: rgba(160, 148, 200, 1);&#10;&#9;&#9;--hover-bg: rgba(76, 64, 138, 0.5);&#10;&#9;&#9;--active-selection-bg: rgba(90, 56, 177, 1);&#10;&#10;&#9;&#9;--star-color-hover: rgba(255, 255, 100, 1);&#10;&#9;&#9;--star-color-selected: rgba(255, 255, 100, 1);&#10;&#10;&#9;&#9;--font-family: 'Inter', sans-serif;&#10;&#9;}&#10;" />
+              <option name="updatedContent" value="&#9;:root {&#10;&#9;&#9;--primary-bg: rgba(26, 22, 53, 0.7);&#10;&#9;&#9;--sidebar-bg: rgba(20, 16, 45, 0.5);&#10;        --dropdown-bg: rgba(20, 16, 45, 0.9);&#10;&#9;&#9;--border-color: rgba(140, 98, 255, 0.2);&#10;&#9;&#9;--primary-purple: rgba(157, 115, 255, 1);&#10;&#9;&#9;--text-primary: rgba(224, 216, 255, 1);&#10;&#9;&#9;--text-secondary: rgba(160, 148, 200, 1);&#10;&#9;&#9;--hover-bg: rgba(76, 64, 138, 0.5);&#10;&#9;&#9;--active-selection-bg: rgba(90, 56, 177, 1);&#10;&#10;&#9;&#9;--star-color-hover: rgba(255, 255, 100, 1);&#10;&#9;&#9;--star-color-selected: rgba(255, 255, 100, 1);&#10;&#10;&#9;&#9;--font-family: 'Inter', sans-serif;&#10;&#9;}" />
+            </PendingDiffInfo>
+          </value>
+        </entry>
       </map>
     </option>
   </component>

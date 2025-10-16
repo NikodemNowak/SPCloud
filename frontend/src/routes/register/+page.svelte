@@ -1,4 +1,4 @@
-<script type="ts">
+<script lang="ts">
 	let username = '';
 	let password = '';
 	let repeatPassword = '';
@@ -125,13 +125,7 @@
 <style>
     .register-container {
         width: 100%;
-        min-height: 100vh;
-        min-height: 100dvh; /* Dynamic viewport height for mobile */
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        background-size: cover;
-        background-position: center;
-        background-repeat: no-repeat;
-        background-attachment: fixed;
+        min-height: 100dvh;
         display: flex;
         justify-content: center;
         align-items: center;
@@ -197,7 +191,7 @@
         border: 1px solid var(--border-color);
         border-radius: 8px;
         font-size: 1rem;
-        font-family: var(--font-family);
+        font-family: var(--font-family), serif;
         color: var(--text-primary);
         box-sizing: border-box;
     }
@@ -267,13 +261,11 @@
         padding: 2px;
     }
 
-    /* Phone */
     @media (max-width: 768px) {
         .register-container {
             padding: 15px;
             justify-content: center;
             align-items: center;
-            min-height: 100vh;
             min-height: 100dvh;
             background-attachment: scroll;
             background-size: cover;
@@ -335,101 +327,6 @@
         }
     }
 
-    /* Small phones */
-    @media (max-width: 480px) {
-        .register-container {
-            padding: 10px;
-            min-height: 100vh;
-            min-height: 100svh;
-        }
-
-        .login-panel {
-            padding: 22px 16px;
-            border-radius: 10px;
-        }
-
-        .title {
-            margin-bottom: 22px;
-        }
-
-        .title h1 {
-            font-size: 22px;
-        }
-
-        .form-group {
-            margin-bottom: 14px;
-        }
-
-        .form-group label {
-            font-size: 12px;
-            margin-bottom: 5px;
-        }
-
-        .form-group input {
-            padding: 11px 12px;
-            font-size: 16px;
-        }
-
-        .btn-login {
-            padding: 12px;
-            font-size: 15px;
-            margin-top: 6px;
-        }
-
-        .register-section {
-            margin-top: 18px;
-            padding-top: 14px;
-        }
-
-        .btn-register {
-            padding: 10px 20px;
-            font-size: 14px;
-        }
-
-        .error {
-            font-size: 13px;
-            padding: 4px;
-            margin-top: 10px;
-        }
-    }
-
-    /* Very small phones */
-    @media (max-width: 360px) {
-        .register-container {
-            padding: 8px;
-            min-height: 100vh;
-            min-height: 100svh;
-        }
-
-        .login-panel {
-            padding: 20px 14px;
-        }
-
-        .title h1 {
-            font-size: 20px;
-        }
-
-        .form-group input {
-            padding: 10px 11px;
-            font-size: 16px;
-        }
-
-        .btn-login {
-            padding: 11px;
-            font-size: 14px;
-        }
-
-        .btn-register {
-            padding: 9px 18px;
-            font-size: 13px;
-        }
-
-        .error {
-            font-size: 12px;
-        }
-    }
-
-    /* Tablet and small desktop */
     @media (min-width: 769px) and (max-width: 1199px) {
         .register-container {
             justify-content: center;
@@ -437,7 +334,6 @@
         }
     }
 
-    /* Desktop */
     @media (min-width: 1200px) {
         .register-container {
             justify-content: center;

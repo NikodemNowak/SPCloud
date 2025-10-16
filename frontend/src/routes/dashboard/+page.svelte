@@ -32,9 +32,9 @@
 	const MAX_STORAGE_MB = 100;
 	const usedStorageMB = $derived(files.reduce((sum, file) => sum + (file.size / (1024 * 1024)), 0));
 
-	const searcher = new FuzzySearch(Array.from(files), ['name'], {
+	const searcher = $derived(new FuzzySearch(Array.from(files), ['name'], {
 		caseSensitive: false
-	});
+	}));
 
 	const displayedFiles = $derived(files
 		.filter((file) => {
@@ -151,7 +151,7 @@
 				</div>
 				<ul class="nav-links">
 					<li class:active={activeNavLink === 'my-files'}>
-						<button on:click={() => (activeNavLink = 'my-files')}>
+						<button onclick={() => (activeNavLink = 'my-files')}>
 							<svg class="feather">
 								<use href="{feather}#hard-drive" />
 							</svg>
@@ -159,7 +159,7 @@
 						</button>
 					</li>
 					<li class:active={activeNavLink === 'favorites'}>
-						<button on:click={() => (activeNavLink = 'favorites')}>
+						<button onclick={() => (activeNavLink = 'favorites')}>
 							<svg class="feather">
 								<use href="{feather}#star" />
 							</svg>
@@ -167,7 +167,7 @@
 						</button>
 					</li>
 					<li class:active={activeNavLink === 'recent'}>
-						<button on:click={() => (activeNavLink = 'recent')}>
+						<button onclick={() => (activeNavLink = 'recent')}>
 							<svg class="feather">
 								<use href="{feather}#clock" />
 							</svg>
@@ -183,7 +183,7 @@
 						<use href="{feather}#upload-cloud" />
 					</svg>
 					<label for="upload" class="link-text">Prześlij plik</label>
-					<input type="file" id="upload" on:change={handleFileUpload} />
+					<input type="file" id="upload" onchange={handleFileUpload} />
 				</div>
 			</div>
 		</nav>
@@ -194,11 +194,11 @@
 					<svg class="feather search-icon">
 						<use href="{feather}#search" />
 					</svg>
-					<input placeholder="Search" type="text" bind:value={search} on:input={handleSearch} />
+					<input placeholder="Search" type="text" bind:value={search} oninput={handleSearch} />
 				</div>
 				<div class="top-bar-actions">
 					<div class="sort-menu">
-						<button class="sort-button" on:click={() => (isSortMenuOpen = !isSortMenuOpen)}>
+						<button class="sort-button" onclick={() => (isSortMenuOpen = !isSortMenuOpen)}>
 							<svg class="feather">
 								<use href="{feather}#sliders" />
 							</svg>
@@ -211,7 +211,7 @@
 									<button
 										type="button"
 										class="sort-btn"
-										on:click={() => handleSortChange('name', 'asc')}
+										onclick={() => handleSortChange('name', 'asc')}
 									>
 										Nazwa
 										<svg class="feather sort-arrow">
@@ -228,7 +228,7 @@
 									<button
 										type="button"
 										class="sort-btn"
-										on:click={() => handleSortChange('name', 'desc')}
+										onclick={() => handleSortChange('name', 'desc')}
 									>
 										Nazwa
 										<svg class="feather sort-arrow">
@@ -245,7 +245,7 @@
 									<button
 										type="button"
 										class="sort-btn"
-										on:click={() => handleSortChange('date', 'asc')}
+										onclick={() => handleSortChange('date', 'asc')}
 									>
 										Data
 										<svg class="feather sort-arrow">
@@ -262,7 +262,7 @@
 									<button
 										type="button"
 										class="sort-btn"
-										on:click={() => handleSortChange('date', 'desc')}
+										onclick={() => handleSortChange('date', 'desc')}
 									>
 										Data
 										<svg class="feather sort-arrow">
@@ -279,7 +279,7 @@
 									<button
 										type="button"
 										class="sort-btn"
-										on:click={() => handleSortChange('size', 'asc')}
+										onclick={() => handleSortChange('size', 'asc')}
 									>
 										Rozmiar
 										<svg class="feather sort-arrow">
@@ -296,7 +296,7 @@
 									<button
 										type="button"
 										class="sort-btn"
-										on:click={() => handleSortChange('size', 'desc')}
+										onclick={() => handleSortChange('size', 'desc')}
 									>
 										Rozmiar
 										<svg class="feather sort-arrow">
@@ -312,7 +312,7 @@
 							</ul>
 						{/if}
 					</div>
-					<button class="logout-button" on:click={handleLogout} title="Wyloguj się">
+					<button class="logout-button" onclick={handleLogout} title="Wyloguj się">
 						<svg class="feather">
 							<use href="{feather}#log-out" />
 						</svg>
@@ -326,7 +326,7 @@
 						<input
 							type="checkbox"
 							class="input-checkbox"
-							on:click={toggleSelectAll}
+							onclick={toggleSelectAll}
 							checked={areAllDisplayedSelected}
 							bind:this={indeterminateCheckbox}
 						/>
@@ -354,7 +354,7 @@
 								aria-label="favorite button"
 								class="favorite-btn"
 								class:favorited={file.is_favorite}
-								on:click|stopPropagation={() => toggleFavorite(file.id)}
+								onclick={() => toggleFavorite(file.id)}
 							>
 								<svg class="feather star-icon">
 									<use href="{feather}#star" />
@@ -373,7 +373,7 @@
 
 			{#if selectedFileIds.length > 0}
 				<div class="download-bar">
-					<button class="download-button" on:click={handleDownload}>
+					<button class="download-button" onclick={handleDownload}>
 						<svg class="feather">
 							<use href="{feather}#download" />
 						</svg>
@@ -427,10 +427,7 @@
 	.background-container {
 		width: 100vw;
 		height: 100vh;
-		background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-		background-size: cover;
-		background-position: center;
-		display: flex;
+        display: flex;
 		justify-content: center;
 		align-items: center;
 		padding: 40px;
@@ -553,7 +550,7 @@
 		text-align: center;
 		font-weight: 600;
 		text-transform: uppercase;
-		letter-spacing: 0.5px;
+		letter-spacing: 0;
 		display: flex;
 		justify-content: center;
 		align-items: center;
