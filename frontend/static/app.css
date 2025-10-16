@@ -1,24 +1,24 @@
-	:root {
-		--primary-bg: rgba(26, 22, 53, 0.7);
-		--sidebar-bg: rgba(20, 16, 45, 0.5);
-        --dropdown-bg: rgba(20, 16, 45, 0.9);
-		--border-color: rgba(140, 98, 255, 0.2);
-		--primary-purple: rgba(157, 115, 255, 1);
-		--text-primary: rgba(224, 216, 255, 1);
-		--text-secondary: rgba(160, 148, 200, 1);
-		--hover-bg: rgba(76, 64, 138, 0.5);
-		--active-selection-bg: rgba(90, 56, 177, 1);
+:root {
+    --primary-bg: rgba(26, 22, 53, 0.7);
+    --sidebar-bg: rgba(20, 16, 45, 0.5);
+    --dropdown-bg: rgba(20, 16, 45, 0.9);
+    --border-color: rgba(140, 98, 255, 0.2);
+    --primary-purple: rgba(157, 115, 255, 1);
+    --text-primary: rgba(224, 216, 255, 1);
+    --text-secondary: rgba(160, 148, 200, 1);
+    --hover-bg: rgba(76, 64, 138, 0.5);
+    --active-selection-bg: rgba(90, 56, 177, 1);
 
-		--star-color-hover: rgba(255, 255, 100, 1);
-		--star-color-selected: rgba(255, 255, 100, 1);
+    --star-color-hover: rgba(255, 255, 100, 1);
+    --star-color-selected: rgba(255, 255, 100, 1);
 
-		--font-family: 'Inter', sans-serif;
-	}
+    --font-family: 'Inter', sans-serif;
+}
 
-    body {
-        margin: 0;
-        padding: 0;
-        font-family: var(--font-family), serif;
-        background: url('background.jpg') no-repeat center center fixed;
-        background-size: cover;
-    }
+body {
+    margin: 0;
+    padding: 0;
+    font-family: var(--font-family), serif;
+    background: url('background.jpg') no-repeat center center fixed;
+    background-size: cover;
+}

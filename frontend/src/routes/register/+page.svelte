@@ -1,21 +1,21 @@
 <script lang="ts">
-	let username = '';
-	let password = '';
-	let repeatPassword = '';
+    let username = '';
+    let password = '';
+    let repeatPassword = '';
 
-	let registerFailedUsernameTaken = false;
-	let registerFailedUsernameIsEmpty = false;
+    let registerFailedUsernameTaken = false;
+    let registerFailedUsernameIsEmpty = false;
 
-	let registerFailedPasswordsNotSame = false;
-	let registerFailedPasswordIsEmpty = false;
-	let registerFailedPasswordTooShort = false;
+    let registerFailedPasswordsNotSame = false;
+    let registerFailedPasswordIsEmpty = false;
+    let registerFailedPasswordTooShort = false;
 
-	/**
-	 * Handles the login process when the "Login" button is clicked.
-	 */
-	function handleRegister() {
+    /**
+     * Handles the login process when the "Login" button is clicked.
+     */
+    function handleRegister() {
 
-		const MIN_PASSWORD_LENGTH = 2;
+        const MIN_PASSWORD_LENGTH = 2;
 
         registerFailedUsernameTaken = false;
         registerFailedUsernameIsEmpty = false;
@@ -23,103 +23,103 @@
         registerFailedPasswordIsEmpty = false;
         registerFailedPasswordTooShort = false;
 
-		if (username.length === 0) {
-			registerFailedUsernameIsEmpty = true;
-			console.error('Username is empty');
-			return;
-		}
+        if (username.length === 0) {
+            registerFailedUsernameIsEmpty = true;
+            console.error('Username is empty');
+            return;
+        }
 
-		if (password.length === 0) {
-			registerFailedPasswordIsEmpty = true;
-			console.error('Password is empty');
-			return;
-		}
+        if (password.length === 0) {
+            registerFailedPasswordIsEmpty = true;
+            console.error('Password is empty');
+            return;
+        }
 
-		if (password !== repeatPassword) {
-			registerFailedPasswordsNotSame = true;
-			console.error('Passwords do not match');
-			return;
-		}
+        if (password !== repeatPassword) {
+            registerFailedPasswordsNotSame = true;
+            console.error('Passwords do not match');
+            return;
+        }
 
-		if (password.length < MIN_PASSWORD_LENGTH) {
-			registerFailedPasswordTooShort = true;
-			console.error('Password is too short');
-			return;
-		}
+        if (password.length < MIN_PASSWORD_LENGTH) {
+            registerFailedPasswordTooShort = true;
+            console.error('Password is too short');
+            return;
+        }
 
-		console.log('Registered: ', username);
+        console.log('Registered: ', username);
 
-		// fetch("localhost:8080/api/register")
-		let users = ['pogman'];
+        // fetch("localhost:8080/api/register")
+        let users = ['pogman'];
 
-		if (users.includes(username)) {
-			registerFailedUsernameTaken = true;
-			console.error('Username already taken');
-			return;
-		}
+        if (users.includes(username)) {
+            registerFailedUsernameTaken = true;
+            console.error('Username already taken');
+            return;
+        }
 
-		window.location.href = '/login';
-	}
+        window.location.href = '/login';
+    }
 </script>
 
 <div class="register-container">
-	<div class="login-panel">
-		<div class="title">
-			<h1>SPCloud</h1>
-		</div>
+    <div class="login-panel">
+        <div class="title">
+            <h1>SPCloud</h1>
+        </div>
 
-		<form on:submit|preventDefault={handleRegister}>
-			<div class="form-group">
-				<label for="username">Login</label>
-				<input
-					type="text"
-					id="username"
-					bind:value={username}
-					placeholder="Wprowadź login"
-					required
-				/>
-			</div>
+        <form on:submit|preventDefault={handleRegister}>
+            <div class="form-group">
+                <label for="username">Login</label>
+                <input
+                        type="text"
+                        id="username"
+                        bind:value={username}
+                        placeholder="Wprowadź login"
+                        required
+                />
+            </div>
 
-			<div class="form-group">
-				<label for="password">Hasło</label>
-				<input
-					type="password"
-					id="password"
-					bind:value={password}
-					placeholder="Wprowadź hasło"
-					required
-				/>
-			</div>
+            <div class="form-group">
+                <label for="password">Hasło</label>
+                <input
+                        type="password"
+                        id="password"
+                        bind:value={password}
+                        placeholder="Wprowadź hasło"
+                        required
+                />
+            </div>
 
-			<div class="form-group">
-				<label for="repeat-password">Powtórz hasło</label>
-				<input
-					type="password"
-					id="repeat-password"
-					bind:value={repeatPassword}
-					placeholder="Wprowadź hasło"
-					required
-				/>
-			</div>
+            <div class="form-group">
+                <label for="repeat-password">Powtórz hasło</label>
+                <input
+                        type="password"
+                        id="repeat-password"
+                        bind:value={repeatPassword}
+                        placeholder="Wprowadź hasło"
+                        required
+                />
+            </div>
 
-			<button type="submit" class="btn-login" on:click={handleRegister}>Zarejestruj się</button>
-		</form>
-		{#if registerFailedUsernameTaken}
-			<div class="error">Ten login jest już użyty!</div>
-		{:else if registerFailedUsernameIsEmpty}
-			<div class="error">Login nie może być pusty!</div>
-		{:else if registerFailedPasswordIsEmpty}
-			<div class="error">Hasło nie może być puste!</div>
-		{:else if registerFailedPasswordsNotSame}
-			<div class="error">Hasła nie są takie same!</div>
-		{:else if registerFailedPasswordTooShort}
-			<div class="error">Hasło jest za krótkie!</div>
-		{/if}
+            <button type="submit" class="btn-login" on:click={handleRegister}>Zarejestruj się</button>
+        </form>
+        {#if registerFailedUsernameTaken}
+            <div class="error">Ten login jest już użyty!</div>
+        {:else if registerFailedUsernameIsEmpty}
+            <div class="error">Login nie może być pusty!</div>
+        {:else if registerFailedPasswordIsEmpty}
+            <div class="error">Hasło nie może być puste!</div>
+        {:else if registerFailedPasswordsNotSame}
+            <div class="error">Hasła nie są takie same!</div>
+        {:else if registerFailedPasswordTooShort}
+            <div class="error">Hasło jest za krótkie!</div>
+        {/if}
 
-		<div class="register-section">
-			<a href="/login" class="btn-register"> Zaloguj się </a>
-		</div>
-	</div>
+        <div class="register-section">
+            <a href="/login" class="btn-register"> Zaloguj się </a>
+        </div>
+    </div>
 </div>
 
 <style>
