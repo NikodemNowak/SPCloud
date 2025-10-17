@@ -47,18 +47,22 @@
             return;
         }
 
-        console.log('Registered: ', username);
-
-        // fetch("localhost:8080/api/register")
-        let users = ['pogman'];
-
-        if (users.includes(username)) {
+        fetch("http://localhost:8000/api/v1/users/register", {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ username, password }),
+        }).then((response) => {
+            return response.json();
+        }).then((data) => {
+            console.log('Success:', data);
+            window.localStorage.setItem('token', JSON.stringify(data.access_token));
+            window.location.href = '/dashboard';
+        }).catch((error) => {
             registerFailedUsernameTaken = true;
-            console.error('Username already taken');
-            return;
-        }
-
-        window.location.href = '/login';
+            console.error('Error:', error);
+        })
     }
 </script>
 
@@ -68,7 +72,7 @@
             <h1>SPCloud</h1>
         </div>
 
-        <form on:submit|preventDefault={handleRegister}>
+        <form onsubmit={handleRegister}>
             <div class="form-group">
                 <label for="username">Login</label>
                 <input
@@ -102,7 +106,7 @@
                 />
             </div>
 
-            <button type="submit" class="btn-login" on:click={handleRegister}>Zarejestruj się</button>
+            <button type="submit" class="btn-login">Zarejestruj się</button>
         </form>
         {#if registerFailedUsernameTaken}
             <div class="error">Ten login jest już użyty!</div>

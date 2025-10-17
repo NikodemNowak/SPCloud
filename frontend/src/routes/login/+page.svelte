@@ -3,26 +3,26 @@
     let password = '';
     let loginFailed = false;
 
-    /**
-     * Handles the login process when the "Login" button is clicked.
-     */
     function handleLogin() {
         console.log('Login:', username);
 
-        // fetch("localhost:8080/api/login")
-
-        let isLoginSuccess = false;
-        if (password === '123') {
-            // benger if, zostawiamy. TODO poprawic
-            isLoginSuccess = true;
-        }
-
-        if (isLoginSuccess) {
+        loginFailed = false;
+        fetch("http://localhost:8000/api/v1/users/login", {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ username, password }),
+        }).then((response) => {
+            return response.json();
+        }).then((data) => {
+            console.log('Success:', data);
+            window.localStorage.setItem('token', JSON.stringify(data.access_token));
             window.location.href = '/dashboard';
-        } else {
+        }).catch((error) => {
             loginFailed = true;
-            console.error('Invalid password for user', username);
-        }
+            console.error('Error:', error);
+        })
     }
 </script>
 
@@ -32,7 +32,7 @@
             <h1>SPCloud</h1>
         </div>
 
-        <form on:submit|preventDefault={handleLogin}>
+        <form onsubmit={handleLogin}>
             <div class="form-group">
                 <label for="username">Login</label>
                 <input
@@ -54,8 +54,8 @@
                         required
                 />
             </div>
-
-            <button type="submit" class="btn-login" on:click={handleLogin}>Zaloguj się</button>
+`
+            <button type="submit" class="btn-login">Zaloguj się</button>
         </form>
         {#if loginFailed}
             <div class="error">Zły login lub hasło!</div>
