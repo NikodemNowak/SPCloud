@@ -82,10 +82,48 @@
 
     function toggleFavorite(fileId: number) {
         const file = files.find((f) => f.id === fileId);
-        if (file) {
-            file.is_favorite = !file.is_favorite;
-            files = [...files];
+        if (!file) return;
+
+        const newFavoriteStatus = !file.is_favorite;
+        const token = JSON.parse(window.localStorage.getItem('token') || '""');
+
+        if (!token) {
+            console.error('Brak tokena - przekierowanie na /login');
+            window.location.href = '/login';
+            return;
         }
+
+        fetch('http://localhost:8000/api/v1/files/change-is-favorite', {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                file_id: fileId,
+                is_favorite: newFavoriteStatus
+            }),
+        }).then((response) => {
+            if (response.status === 401 || response.status === 403) {
+                console.error('Token nieprawidłowy - przekierowanie na /login');
+                window.localStorage.removeItem('token');
+                window.location.href = '/login';
+                return;
+            }
+
+            if (!response.ok) {
+                throw new Error('Failed to change favorite status');
+            }
+            return response.json();
+        }).then((data) => {
+            if (data) {
+                console.log('Status ulubionego zmieniony pomyślnie:', data);
+                file.is_favorite = newFavoriteStatus;
+                files = [...files];
+            }
+        }).catch((error) => {
+            console.error('Błąd podczas zmiany statusu ulubionego:', error);
+        });
     }
 
     function toggleSelectAll() {
@@ -143,6 +181,8 @@
             }).catch((error) => {
                 console.error('Błąd podczas pobierania pliku:', error);
             });
+        } else {
+            //
         }
     }
 
