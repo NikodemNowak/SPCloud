@@ -14,3 +14,9 @@ class UserLogin(BaseModel):
 class Token(BaseModel):
     access_token: str
     token_type: str
+
+
+class UserLoginWithTOTP(BaseModel):
+    username: str
+    password: str
+    totp_code: str
