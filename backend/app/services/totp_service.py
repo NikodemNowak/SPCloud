@@ -49,7 +49,7 @@ class TOTPService:
         totp = pyotp.TOTP(secret)
         provisioning_uri = totp.provisioning_uri(
             name=username,
-            issuer_name="YourAppName"
+            issuer_name="SPCloud"
         )
 
         # Generate QR code
