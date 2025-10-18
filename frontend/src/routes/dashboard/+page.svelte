@@ -3,6 +3,7 @@
     import logoUrl from '$lib/assets/logo.svg';
     import FuzzySearch from 'fuzzy-search';
     import StorageProgress from '../../components/storage-progress.svelte';
+    import { onMount } from 'svelte';
 
     type FileDesc = {
         id: number;
@@ -22,11 +23,7 @@
 
     let selectedFileIds = $state<number[]>([]);
     let result = $state<FileDesc[]>([]);
-    let files = $state<FileDesc[]>([
-        {id: 1, name: 'Dokumenty.zip', is_favorite: true, date: new Date('2025-10-10'), size: 2048},
-        {id: 2, name: 'Prezentacja_projektu.pptx', is_favorite: false, date: new Date('2025-10-11'), size: 16952},
-        {id: 3, name: 'Raport_kwartalny.pdf', is_favorite: false, date: new Date('2025-10-08'), size: 9184312}
-    ]);
+    let files = $state<FileDesc[]>([]);
 
     // Storage tracking
     const MAX_STORAGE_MB = 100;
@@ -110,9 +107,72 @@
         result = searcher.search(search);
     }
 
-    function handleFileUpload() {
-        console.log('WYSYLAM PLIK UWAGA KURWA');
+    function fetchFiles() {
+        const token = JSON.parse(window.localStorage.getItem('token') || '""');
+
+        fetch("http://localhost:8000/api/v1/files/", {
+            method: 'GET',
+            headers: {
+                'Authorization': `Bearer ${token}`,
+            },
+        }).then((response) => {
+            if (!response.ok) {
+                throw new Error('Failed to fetch files');
+            }
+            return response.json();
+        }).then((data) => {
+            console.log('Pobrano pliki:', data);
+
+            files = data.files.map((file: any) => ({
+                id: file.id,
+                name: file.logical_name || file.filename,
+                is_favorite: false, // TODO: dodaj obsługę ulubionych jeśli backend to wspiera
+                date: new Date(file.upload_date),
+                size: file.size
+            }));
+        }).catch((error) => {
+            console.error('Błąd podczas pobierania plików:', error);
+        });
     }
+
+    function handleFileUpload(event: Event) {
+        const input = event.target as HTMLInputElement;
+        const file = input.files?.[0];
+
+        if (!file) {
+            console.error('Nie wybrano pliku');
+            return;
+        }
+
+        const formData = new FormData();
+        formData.append('file', file);
+
+        const token = JSON.parse(window.localStorage.getItem('token') || '""');
+
+        fetch("http://localhost:8000/api/v1/files/upload", {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${token}`,
+            },
+            body: formData,
+        }).then((response) => {
+            if (!response.ok) {
+                throw new Error('Upload failed');
+            }
+            return response.json();
+        }).then((data) => {
+            console.log('Plik przesłany pomyślnie:', data);
+            input.value = '';
+            // Odśwież listę plików po przesłaniu
+            fetchFiles();
+        }).catch((error) => {
+            console.error('Błąd podczas przesyłania pliku:', error);
+        });
+    }
+
+    onMount(() => {
+        fetchFiles();
+    });
 
     function formatBytes(bytes: number, decimals = 2) {
         if (bytes === 0) return '0 Bytes';
@@ -124,22 +184,6 @@
 
         return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i];
     }
-
-    // function downloadFile() {
-    // 	console.log('Pobieranie pliku...');
-    // }
-    //
-    // function uploadFile() {
-    // 	console.log('Przesyłanie pliku...');
-    // }
-    //
-    // function sendMultipleFiles() {
-    // 	console.log('Wysyłanie wielu plików (ZIP)...');
-    // }
-    //
-    // function refreshList() {
-    // 	console.log('Odświeżanie listy...');
-    // }
 </script>
 
 <div class="background-container">

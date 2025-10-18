@@ -54,6 +54,9 @@
             },
             body: JSON.stringify({ username, password }),
         }).then((response) => {
+            if (!response.ok) {
+                throw new Error('Registration failed');
+            }
             return response.json();
         }).then((data) => {
             console.log('Success:', data);
@@ -61,7 +64,7 @@
             window.location.href = '/dashboard';
         }).catch((error) => {
             registerFailedUsernameTaken = true;
-            console.error('Error:', error);
+            console.error(error);
         })
     }
 </script>
