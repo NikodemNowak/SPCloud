@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from io import BytesIO
 from typing import List, Optional
 from uuid import uuid4
@@ -35,8 +35,13 @@ class FileService:
         ensure_bucket_exists(bucket_name)
 
         file_key = file.filename
+
+        file_content = await file.read()
+        file_size = len(file_content)
+        await file.seek(0)
+
         try:
-            s3.upload_fileobj(file.file, bucket_name, file_key)
+            s3.upload_fileobj(BytesIO(file_content), bucket_name, file_key)
         except Exception as e:
             raise ValueError(f"Failed to upload file: {str(e)}")
 
@@ -46,8 +51,8 @@ class FileService:
             name=file.filename,
             size=file.size,
             owner=username,
-            created_at=datetime.utcnow(),
-            updated_at=datetime.utcnow()
+            created_at=datetime.now(timezone.utc),
+            updated_at=datetime.now(timezone.utc)
         )
 
         try:
@@ -60,17 +65,17 @@ class FileService:
                 status_code=status.HTTP_409_CONFLICT,
                 detail="File with the same name already exists in the database.",
             )
-        except Exception:
+        except Exception as e:
             await self.db.rollback()
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Database error",
+                detail=f"Database error: {str(e)}",
             )
 
         return {
             "filename": file.filename,
             "content_type": file.content_type,
-            "size": file.size,
+            "size": file_size,
             "path": new_file.path
         }
 

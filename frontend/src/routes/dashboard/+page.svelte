@@ -18,6 +18,7 @@
     let isSortMenuOpen = $state(false);
     let sortBy = $state('name');
     let sortOrder = $state('asc');
+    let isDeleteConfirming = $state(false);
 
     let indeterminateCheckbox: HTMLInputElement;
 
@@ -51,7 +52,9 @@
         .sort((a, b) => {
             let comparison: number = 0;
             if (sortBy === 'name') {
-                comparison = a.name.localeCompare(b.name, undefined, {numeric: true});
+                const nameA = a.name || '';
+                const nameB = b.name || '';
+                comparison = nameA.localeCompare(nameB, undefined, {numeric: true});
             } else if (sortBy === 'date') {
                 comparison = a.date.getTime() - b.date.getTime();
             } else if (sortBy === 'size') {
@@ -95,11 +98,108 @@
 
     function handleDownload() {
         console.log('Pobieranie plików o ID:', selectedFileIds);
+
+        if (selectedFileIds.length === 1) {
+            const token = JSON.parse(window.localStorage.getItem('token') || '""');
+
+            if (!token) {
+                console.error('Brak tokena - przekierowanie na /login');
+                window.location.href = '/login';
+                return;
+            }
+
+            const fileId = selectedFileIds[0];
+            const file = files.find((f) => f.id === fileId);
+
+            fetch(`http://localhost:8000/api/v1/files/${fileId}/download`, {
+                method: 'GET',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                },
+            }).then((response) => {
+                if (response.status === 401 || response.status === 403) {
+                    console.error('Token nieprawidłowy - przekierowanie na /login');
+                    window.localStorage.removeItem('token');
+                    window.location.href = '/login';
+                    return;
+                }
+
+                if (!response.ok) {
+                    throw new Error('Download failed');
+                }
+                return response.blob();
+            }).then((blob) => {
+                if (blob) {
+                    const url = window.URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = file?.name || 'plik';
+                    document.body.appendChild(a);
+                    a.click();
+                    window.URL.revokeObjectURL(url);
+                    document.body.removeChild(a);
+                    console.log('Plik pobrany pomyślnie');
+                }
+            }).catch((error) => {
+                console.error('Błąd podczas pobierania pliku:', error);
+            });
+        }
+    }
+
+    function handleDelete() {
+        if (!isDeleteConfirming) {
+            isDeleteConfirming = true;
+            return;
+        }
+
+        const token = JSON.parse(window.localStorage.getItem('token') || '""');
+
+        if (!token) {
+            console.error('Brak tokena - przekierowanie na /login');
+            window.location.href = '/login';
+            return;
+        }
+
+        for (const fileId of selectedFileIds) {
+            fetch(`http://localhost:8000/api/v1/files/${fileId}`, {
+                method: 'DELETE',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                },
+            }).then((response) => {
+                if (response.status === 401 || response.status === 403) {
+                    console.error('Token nieprawidłowy - przekierowanie na /login');
+                    window.localStorage.removeItem('token');
+                    window.location.href = '/login';
+                    return;
+                }
+
+                if (!response.ok) {
+                    return response.json();
+                }
+            }).then((data) => {
+                if (data) {
+                    console.error('Błąd podczas usuwania pliku:', data.detail || data);
+                }
+            }).catch((error) => {
+                console.error('Błąd podczas usuwania pliku:', error);
+            });
+        }
+
+        setTimeout(() => {
+            fetchFiles();
+            selectedFileIds = [];
+            isDeleteConfirming = false;
+        }, 500);
+    }
+
+    function cancelDelete() {
+        isDeleteConfirming = false;
     }
 
     function handleLogout() {
         console.log('Wylogowywanie...');
-
+        window.localStorage.removeItem('token');
         window.location.href = '/login';
     }
 
@@ -125,10 +225,10 @@
 
             files = data.files.map((file: any) => ({
                 id: file.id,
-                name: file.logical_name || file.filename,
-                is_favorite: false, // TODO: dodaj obsługę ulubionych jeśli backend to wspiera
-                date: new Date(file.upload_date),
-                size: file.size
+                name: file.name || 'Nieznany plik',
+                is_favorite: file.is_favorite || false,
+                date: new Date(file.updated_at.replace('Z', '')),
+                size: file.size || 0
             }));
         }).catch((error) => {
             console.error('Błąd podczas pobierania plików:', error);
@@ -148,6 +248,12 @@
         formData.append('file', file);
 
         const token = JSON.parse(window.localStorage.getItem('token') || '""');
+
+        if (!token) {
+            console.error('Brak tokena - przekierowanie na /login');
+            window.location.href = '/login';
+            return;
+        }
 
         fetch("http://localhost:8000/api/v1/files/upload", {
             method: 'POST',
@@ -409,7 +515,13 @@
                                 <use href="{feather}#file"/>
                             </svg>
                             <span class="file-name">{file.name}</span>
-                            <span class="file-date">{file.date.toLocaleDateString()}</span>
+                            <span class="file-date">{file.date.toLocaleDateString('pl-PL', {
+                                year: 'numeric',
+                                month: '2-digit',
+                                day: '2-digit',
+                                hour: '2-digit',
+                                minute: '2-digit'
+                            })}</span>
                             <span class="file-size">{formatBytes(file.size)}</span>
                         </li>
                     {/each}
@@ -428,6 +540,30 @@
                             Pobierz wiele plików
                         {/if}
                     </button>
+                </div>
+
+                <div class="delete-bar">
+                    {#if !isDeleteConfirming}
+                        <button class="delete-button" onclick={handleDelete}>
+                            <svg class="feather">
+                                <use href="{feather}#trash-2"/>
+                            </svg>
+                        </button>
+                    {:else}
+                        <div class="delete-confirm">
+                            <span class="delete-text">Czy na pewno?</span>
+                            <button class="confirm-yes" onclick={handleDelete} title="Tak, usuń">
+                                <svg class="feather">
+                                    <use href="{feather}#check"/>
+                                </svg>
+                            </button>
+                            <button class="confirm-no" onclick={cancelDelete} title="Nie, anuluj">
+                                <svg class="feather">
+                                    <use href="{feather}#x"/>
+                                </svg>
+                            </button>
+                        </div>
+                    {/if}
                 </div>
             {/if}
         </div>
@@ -521,7 +657,7 @@
         list-style: none;
         padding: 8px;
         width: 200px;
-        z-index: 10;
+        z-index: 1000;
         box-shadow: 0 8px 16px rgba(0, 0, 0, 0.3);
     }
 
@@ -984,6 +1120,99 @@
         stroke: #fff;
     }
 
+    .delete-bar {
+        position: absolute;
+        bottom: 24px;
+        right: 24px;
+        animation: slide-up-right 0.3s ease-out forwards;
+    }
+
+    .delete-button {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 48px;
+        height: 48px;
+        padding: 12px;
+        background-color: #dc2626;
+        color: #fff;
+        border-radius: 50%;
+        box-shadow: 0 2px 8px rgba(220, 38, 38, 0.3);
+        transition: all 0.3s ease;
+    }
+
+    .delete-button:hover {
+        background-color: #b91c1c;
+        box-shadow: 0 4px 12px rgba(220, 38, 38, 0.5);
+    }
+
+    .delete-button .feather {
+        stroke: #fff;
+    }
+
+    .delete-confirm {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 12px 16px;
+        background-color: #dc2626;
+        border-radius: 24px;
+        box-shadow: 0 2px 8px rgba(220, 38, 38, 0.3);
+        animation: expand-confirm 0.3s ease-out forwards;
+    }
+
+    .delete-text {
+        color: #fff;
+        font-weight: 600;
+        font-size: 0.9rem;
+        white-space: nowrap;
+    }
+
+    .confirm-yes,
+    .confirm-no {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 36px;
+        height: 36px;
+        border-radius: 50%;
+        transition: all 0.2s ease;
+    }
+
+    .confirm-yes {
+        background-color: rgba(255, 255, 255, 0.2);
+    }
+
+    .confirm-yes:hover {
+        background-color: rgba(255, 255, 255, 0.3);
+    }
+
+    .confirm-no {
+        background-color: rgba(255, 255, 255, 0.2);
+    }
+
+    .confirm-no:hover {
+        background-color: rgba(255, 255, 255, 0.3);
+    }
+
+    .confirm-yes .feather,
+    .confirm-no .feather {
+        stroke: #fff;
+        width: 20px;
+        height: 20px;
+    }
+
+    @keyframes expand-confirm {
+        from {
+            opacity: 0;
+            width: 48px;
+        }
+        to {
+            opacity: 1;
+            width: auto;
+        }
+    }
+
     @keyframes slide-up {
         from {
             opacity: 0;
@@ -992,6 +1221,17 @@
         to {
             opacity: 1;
             transform: translate(-50%, 0);
+        }
+    }
+
+    @keyframes slide-up-right {
+        from {
+            opacity: 0;
+            transform: translateY(20px);
+        }
+        to {
+            opacity: 1;
+            transform: translateY(0);
         }
     }
 
