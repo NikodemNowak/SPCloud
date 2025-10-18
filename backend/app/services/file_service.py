@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 from io import BytesIO
-from typing import List, Optional
+from typing import List
 from uuid import uuid4
 
 from core.s3_client import s3, ensure_bucket_exists
@@ -17,7 +17,16 @@ class FileService:
     def __init__(self, db: AsyncSession):
         self.db = db
 
-    async def save_file(self, file: UploadFile, username: str, logical_name: Optional[str] = None) -> dict:
+    async def save_file(self, file: UploadFile, username: str) -> dict:
+        result = await self.db.execute(select(User).where(User.username == username))
+        user = result.scalar_one_or_none()
+
+        if (user.used_storage_mb + file.size / (1024 * 1024)) > user.max_storage_mb:
+            raise HTTPException(
+                status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                detail="Uploading this file would exceed your storage quota."
+            )
+
         existing_file_query = select(FileStorage).where(
             FileStorage.owner == username,
             FileStorage.name == file.filename
@@ -70,6 +79,18 @@ class FileService:
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail=f"Database error: {str(e)}",
+            )
+
+        user.used_storage_mb += file_size / (1024 * 1024)
+        try:
+            self.db.add(user)
+            await self.db.commit()
+            await self.db.refresh(user)
+        except Exception as e:
+            await self.db.rollback()
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Failed to update user storage usage: {str(e)}",
             )
 
         return {
@@ -173,6 +194,9 @@ class FileService:
         )
         file_record = result.scalar_one_or_none()
 
+        result = await self.db.execute(select(User).where(User.username == username))
+        user = result.scalar_one_or_none()
+
         if not file_record:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -188,6 +212,20 @@ class FileService:
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail=f"Failed to delete file from S3: {str(e)}"
+            )
+
+        try:
+            user.used_storage_mb -= file_record.size / (1024 * 1024)
+            if user.used_storage_mb < 0:
+                user.used_storage_mb = 0
+            self.db.add(user)
+            await self.db.commit()
+            await self.db.refresh(user)
+        except Exception as e:
+            await self.db.rollback()
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Failed to update user storage usage: {str(e)}"
             )
 
         try:

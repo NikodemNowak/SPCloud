@@ -44,6 +44,8 @@ class User(Base):
     username = Column(String, primary_key=True, index=True)
     hashed_password = Column(String)
     user_type = Column(String, default="regular")  # 'admin', 'regular'
+    max_storage_mb = Column(Integer, default=100)  # Default 100 MB
+    used_storage_mb = Column(Integer, default=0)  # Used storage in MB
 
     files = relationship("FileStorage", back_populates="user")
     refresh_tokens = relationship("RefreshToken", back_populates="user", cascade="all, delete-orphan")
