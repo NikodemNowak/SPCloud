@@ -3,7 +3,7 @@
     import logoUrl from '$lib/assets/logo.svg';
     import FuzzySearch from 'fuzzy-search';
     import StorageProgress from '../../components/storage-progress.svelte';
-    import { onMount } from 'svelte';
+    import {onMount} from 'svelte';
 
     type FileDesc = {
         id: number;
@@ -160,8 +160,8 @@
             return;
         }
 
-        for (const fileId of selectedFileIds) {
-            fetch(`http://localhost:8000/api/v1/files/${fileId}`, {
+        const deletePromises = selectedFileIds.map((fileId) => {
+            return fetch(`http://localhost:8000/api/v1/files/${fileId}`, {
                 method: 'DELETE',
                 headers: {
                     'Authorization': `Bearer ${token}`,
@@ -175,22 +175,20 @@
                 }
 
                 if (!response.ok) {
-                    return response.json();
-                }
-            }).then((data) => {
-                if (data) {
-                    console.error('Błąd podczas usuwania pliku:', data.detail || data);
+                    return response.json().then((data) => {
+                        console.error('Błąd podczas usuwania pliku:', data.detail || data);
+                    });
                 }
             }).catch((error) => {
                 console.error('Błąd podczas usuwania pliku:', error);
             });
-        }
+        });
 
-        setTimeout(() => {
+        Promise.all(deletePromises).then(() => {
             fetchFiles();
             selectedFileIds = [];
             isDeleteConfirming = false;
-        }, 500);
+        });
     }
 
     function cancelDelete() {
@@ -237,15 +235,12 @@
 
     function handleFileUpload(event: Event) {
         const input = event.target as HTMLInputElement;
-        const file = input.files?.[0];
+        const files = input.files;
 
-        if (!file) {
-            console.error('Nie wybrano pliku');
+        if (!files || files.length === 0) {
+            console.error('Nie wybrano plików');
             return;
         }
-
-        const formData = new FormData();
-        formData.append('file', file);
 
         const token = JSON.parse(window.localStorage.getItem('token') || '""');
 
@@ -255,25 +250,36 @@
             return;
         }
 
-        fetch("http://localhost:8000/api/v1/files/upload", {
-            method: 'POST',
-            headers: {
-                'Authorization': `Bearer ${token}`,
-            },
-            body: formData,
-        }).then((response) => {
-            if (!response.ok) {
-                throw new Error('Upload failed');
+        const fileArray = Array.from(files);
+
+        async function uploadFilesSequentially() {
+            for (const file of fileArray) {
+                const formData = new FormData();
+                formData.append('file', file);
+
+                await fetch("http://localhost:8000/api/v1/files/upload", {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                    },
+                    body: formData,
+                }).then((response) => {
+                    if (!response.ok) {
+                        throw new Error('Upload failed');
+                    }
+                    return response.json();
+                }).then((data) => {
+                    console.log('Plik przesłany pomyślnie:', data);
+                }).catch((error) => {
+                    console.error('Błąd podczas przesyłania pliku:', error);
+                });
             }
-            return response.json();
-        }).then((data) => {
-            console.log('Plik przesłany pomyślnie:', data);
+
             input.value = '';
-            // Odśwież listę plików po przesłaniu
             fetchFiles();
-        }).catch((error) => {
-            console.error('Błąd podczas przesyłania pliku:', error);
-        });
+        }
+
+        uploadFilesSequentially();
     }
 
     onMount(() => {
@@ -334,7 +340,7 @@
                         <use href="{feather}#upload-cloud"/>
                     </svg>
                     <label for="upload" class="link-text">Prześlij plik</label>
-                    <input type="file" id="upload" onchange={handleFileUpload}/>
+                    <input type="file" id="upload" multiple onchange={handleFileUpload}/>
                 </div>
             </div>
         </nav>
@@ -548,6 +554,7 @@
                             <svg class="feather">
                                 <use href="{feather}#trash-2"/>
                             </svg>
+                            Usuń
                         </button>
                     {:else}
                         <div class="delete-confirm">
@@ -1127,44 +1134,35 @@
         animation: slide-up-right 0.3s ease-out forwards;
     }
 
-    .delete-button {
+    .delete-button,
+    .delete-confirm {
         display: flex;
         align-items: center;
-        justify-content: center;
-        width: 48px;
-        height: 48px;
-        padding: 12px;
-        background-color: #dc2626;
+        gap: 12px;
+        padding: 12px 24px;
         color: #fff;
-        border-radius: 50%;
-        box-shadow: 0 2px 8px rgba(220, 38, 38, 0.3);
-        transition: all 0.3s ease;
+        font-weight: 600;
+        border-radius: 8px;
+        box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+        transition: background-color 0.2s ease,
+        width 0.3s ease-out;
+        white-space: nowrap;
+        background-color: #dc2626;
     }
 
-    .delete-button:hover {
+    .delete-button:hover,
+    .delete-confirm:hover {
         background-color: #b91c1c;
-        box-shadow: 0 4px 12px rgba(220, 38, 38, 0.5);
     }
 
     .delete-button .feather {
         stroke: #fff;
     }
 
-    .delete-confirm {
-        display: flex;
-        align-items: center;
-        gap: 12px;
-        padding: 12px 16px;
-        background-color: #dc2626;
-        border-radius: 24px;
-        box-shadow: 0 2px 8px rgba(220, 38, 38, 0.3);
-        animation: expand-confirm 0.3s ease-out forwards;
-    }
-
     .delete-text {
         color: #fff;
         font-weight: 600;
-        font-size: 0.9rem;
+        font-size: 1rem;
         white-space: nowrap;
     }
 
@@ -1173,8 +1171,8 @@
         display: flex;
         align-items: center;
         justify-content: center;
-        width: 36px;
-        height: 36px;
+        width: 24px;
+        height: 24px;
         border-radius: 50%;
         transition: all 0.2s ease;
     }
@@ -1198,8 +1196,8 @@
     .confirm-yes .feather,
     .confirm-no .feather {
         stroke: #fff;
-        width: 20px;
-        height: 20px;
+        width: 16px;
+        height: 16px;
     }
 
     @keyframes expand-confirm {
