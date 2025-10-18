@@ -43,9 +43,9 @@ async def list_files(db: AsyncSession = Depends(get_db),
 
 @router.get("/{file_id}/download", status_code=status.HTTP_200_OK)
 async def download_file(
-    file_id: str,
-    user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db)
+        file_id: str,
+        user: User = Depends(get_current_user),
+        db: AsyncSession = Depends(get_db)
 ):
     """
     Endpoint to download a file by ID
@@ -57,15 +57,15 @@ async def download_file(
     return StreamingResponse(
         file_obj,
         media_type="application/octet-stream",
-        headers={"Content-Disposition": f"attachment; filename={filename}"}
+        headers={"Content-Disposition": f"attachment; filename*=UTF-8''{filename}"}
     )
 
 
 @router.delete("/{file_id}", status_code=status.HTTP_200_OK)
 async def delete_file(
-    file_id: str,
-    user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db)
+        file_id: str,
+        user: User = Depends(get_current_user),
+        db: AsyncSession = Depends(get_db)
 ):
     """
     Endpoint to delete a file by ID

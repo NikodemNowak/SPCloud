@@ -1,7 +1,7 @@
 from datetime import datetime
 from io import BytesIO
 from typing import List, Optional
-from uuid import uuid4, UUID
+from uuid import uuid4
 
 from core.s3_client import s3, ensure_bucket_exists
 from fastapi import UploadFile, HTTPException, status
@@ -10,16 +10,7 @@ from schemas.file import FileItem
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
-
-
-def _str_to_uuid(id_str: str) -> UUID:
-    try:
-        return UUID(id_str)
-    except ValueError:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invalid UUID format"
-        )
+from util import _str_to_uuid
 
 
 class FileService:
