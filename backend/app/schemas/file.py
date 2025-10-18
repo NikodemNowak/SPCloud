@@ -19,5 +19,9 @@ class FileItem(BaseModel):
 
 
 class FileSetIsFavorite(BaseModel):
-    file_id: UUID
+    file_id: str
     is_favorite: bool
+
+
+class FileDownloadManyFiles(BaseModel):
+    file_ids: list[str]

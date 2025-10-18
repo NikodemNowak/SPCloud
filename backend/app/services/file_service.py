@@ -1,7 +1,7 @@
 from datetime import datetime, timezone
 from io import BytesIO
 from typing import List, Optional
-from uuid import uuid4, UUID
+from uuid import uuid4
 
 from core.s3_client import s3, ensure_bucket_exists
 from fastapi import UploadFile, HTTPException, status
@@ -125,6 +125,43 @@ class FileService:
                 detail=f"Failed to download file from S3: {str(e)}"
             )
 
+    async def get_many_files(self, file_ids: List[str], username: str):
+        import zipfile
+
+        zip_buffer = BytesIO()
+        with zipfile.ZipFile(zip_buffer, "w") as zip_file:
+            for file_id in file_ids:
+                file_uuid = _str_to_uuid(file_id)
+
+                result = await self.db.execute(
+                    select(FileStorage).where(
+                        FileStorage.id == file_uuid,
+                        FileStorage.owner == username
+                    )
+                )
+                file_record = result.scalar_one_or_none()
+
+                if not file_record:
+                    continue
+
+                bucket_name = f"user-{username}"
+                file_key = file_record.name
+
+                try:
+                    file_obj = BytesIO()
+                    s3.download_fileobj(bucket_name, file_key, file_obj)
+                    file_obj.seek(0)
+                    zip_file.writestr(file_record.name, file_obj.read())
+                except Exception as e:
+                    raise HTTPException(
+                        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                        detail=f"Failed to download file '{file_record.name}' from S3: {str(e)}"
+                    )
+
+        zip_buffer.seek(0)
+        zip_filename = "files_bundle.zip"
+        return zip_buffer, zip_filename
+
     async def delete_file(self, file_id: str, username: str) -> dict:
         file_uuid = _str_to_uuid(file_id)
 
@@ -165,7 +202,7 @@ class FileService:
 
         return {"message": f"File '{file_record.name}' deleted successfully"}
 
-    async def set_favorite_file(self, file_id: UUID, is_favorite: bool, username: str) -> dict:
+    async def set_favorite_file(self, file_id: str, is_favorite: bool, username: str) -> dict:
         result = await self.db.execute(
             select(FileStorage).where(
                 FileStorage.id == file_id,

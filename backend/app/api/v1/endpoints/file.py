@@ -6,7 +6,7 @@ from fastapi import APIRouter, UploadFile, File, Form, HTTPException
 from fastapi import Depends, status
 from fastapi.responses import StreamingResponse
 from models.models import User
-from schemas.file import FileSetIsFavorite
+from schemas.file import FileSetIsFavorite, FileDownloadManyFiles
 from services.file_service import FileService
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -42,7 +42,7 @@ async def list_files(db: AsyncSession = Depends(get_db),
     return {"files": files}
 
 
-@router.get("/{file_id}/download", status_code=status.HTTP_200_OK)
+@router.get("/download/{file_id}", status_code=status.HTTP_200_OK)
 async def download_file(
         file_id: str,
         user: User = Depends(get_current_user),
@@ -59,6 +59,25 @@ async def download_file(
         file_obj,
         media_type="application/octet-stream",
         headers={"Content-Disposition": f"attachment; filename*=UTF-8''{filename}"}
+    )
+
+
+@router.get("/download", status_code=status.HTTP_200_OK)
+async def download_many_files(
+        files: FileDownloadManyFiles,
+        user: User = Depends(get_current_user),
+        db: AsyncSession = Depends(get_db)
+):
+    """
+    Endpoint to download multiple files as a ZIP archive
+    - **files**: Object containing list of file IDs to download
+    """
+    zip_obj, zip_filename = await FileService(db).get_many_files(file_ids=files.file_ids, username=user.username)
+
+    return StreamingResponse(
+        zip_obj,
+        media_type="application/zip",
+        headers={"Content-Disposition": f"attachment; filename*=UTF-8''{zip_filename}"}
     )
 
 
