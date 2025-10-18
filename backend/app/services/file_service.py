@@ -1,12 +1,12 @@
 from datetime import datetime, timezone
 from io import BytesIO
 from typing import List, Optional
-from uuid import uuid4
+from uuid import uuid4, UUID
 
 from core.s3_client import s3, ensure_bucket_exists
 from fastapi import UploadFile, HTTPException, status
 from models.models import User, FileStorage
-from schemas.file import FileItem
+from schemas.file import FileItem, FileSetIsFavorite
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
@@ -164,3 +164,34 @@ class FileService:
             )
 
         return {"message": f"File '{file_record.name}' deleted successfully"}
+
+    async def set_favorite_file(self, file_id: UUID, is_favorite: bool, username: str) -> dict:
+        result = await self.db.execute(
+            select(FileStorage).where(
+                FileStorage.id == file_id,
+                FileStorage.owner == username
+            )
+        )
+        file_record = result.scalar_one_or_none()
+
+        if not file_record:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="File not found or you don't have permission to modify it"
+            )
+
+        file_record.is_favorite = is_favorite
+        file_record.updated_at = datetime.now(timezone.utc)
+
+        try:
+            self.db.add(file_record)
+            await self.db.commit()
+            await self.db.refresh(file_record)
+        except Exception as e:
+            await self.db.rollback()
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Failed to update file in database: {str(e)}"
+            )
+
+        return {"file_id": str(file_record.id), "is_favorite": file_record.is_favorite}

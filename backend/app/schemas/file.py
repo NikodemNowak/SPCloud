@@ -16,3 +16,8 @@ class FileItem(BaseModel):
     is_favorite: bool
     created_at: datetime
     updated_at: datetime
+
+
+class FileSetIsFavorite(BaseModel):
+    file_id: UUID
+    is_favorite: bool

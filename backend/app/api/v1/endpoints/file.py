@@ -6,6 +6,7 @@ from fastapi import APIRouter, UploadFile, File, Form, HTTPException
 from fastapi import Depends, status
 from fastapi.responses import StreamingResponse
 from models.models import User
+from schemas.file import FileSetIsFavorite
 from services.file_service import FileService
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -73,3 +74,16 @@ async def delete_file(
     - **file_id**: UUID of the file to delete
     """
     return await FileService(db).delete_file(file_id=file_id, username=user.username)
+
+
+@router.post("/change-is-favorite", status_code=status.HTTP_200_OK)
+async def set_favorite_file(file: FileSetIsFavorite,
+                            user: User = Depends(get_current_user),
+                            db: AsyncSession = Depends(get_db)):
+    """
+    Endpoint to set or unset a file as favorite
+
+    - **file_favorite**: Object containing file ID and favorite status
+    """
+    return await FileService(db).set_favorite_file(file_id=file.file_id, is_favorite=file.is_favorite,
+                                                   username=user.username)
