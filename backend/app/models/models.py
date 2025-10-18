@@ -44,6 +44,8 @@ class User(Base):
     username = Column(String, primary_key=True, index=True)
     hashed_password = Column(String)
     user_type = Column(String, default="regular")  # 'admin', 'regular'
+    totp_secret = Column(String, nullable=True)
+    totp_configured = Column(Boolean, default=False)
 
     files = relationship("FileStorage", back_populates="user")
     refresh_tokens = relationship("RefreshToken", back_populates="user", cascade="all, delete-orphan")
