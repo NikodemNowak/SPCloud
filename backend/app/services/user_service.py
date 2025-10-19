@@ -1,11 +1,16 @@
-from core.security import hash_password, verify_password, create_access_token, create_refresh_token, decode_refresh_token, now_utc
-from core.security import hash_password, verify_password, create_access_token, create_totp_setup_token
+from core.security import (
+    hash_password,
+    verify_password,
+    create_access_token,
+    create_refresh_token,
+    decode_refresh_token,
+    now_utc,
+    create_totp_setup_token
+)
 from fastapi import HTTPException, status
 from models.models import User, RefreshToken
-from schemas.user import UserCreate, UserLogin, Token, RefreshTokenRequest
-from models.models import User
+from schemas.user import UserCreate, UserLogin, Token, RefreshTokenRequest, UserLoginWithTOTP
 from schemas.totp import TOTPSetupToken
-from schemas.user import UserCreate, UserLogin, Token, UserLoginWithTOTP
 from services.log_service import LogService
 from services.totp_service import TOTPService
 from sqlalchemy.exc import IntegrityError
@@ -23,6 +28,9 @@ class UserService:
         self.log_service = LogService(db)
 
     async def _create_tokens(self, username: str) -> Token:
+        """
+        Tworzy access token i refresh token dla użytkownika
+        """
         access_token = create_access_token(username)
         refresh_token_str, expires_at = create_refresh_token(username)
 
@@ -43,14 +51,10 @@ class UserService:
             token_type="bearer"
         )
 
-    async def register(self, user_data: UserCreate):
-        result = await self.db.execute(select(User).where(User.username == user_data.username))
-        if result.scalar_one_or_none():
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail="Username already exists",
-            )
     async def _get_and_verify_user(self, username: str, password: str) -> User:
+        """
+        Pobiera użytkownika i weryfikuje hasło
+        """
         result = await self.db.execute(select(User).where(User.username == username))
         user = result.scalar_one_or_none()
         if not user or not verify_password(password, user.hashed_password):
@@ -62,6 +66,9 @@ class UserService:
         return user
 
     async def register(self, user_data: UserCreate, ip_address: str = None) -> TOTPSetupToken:
+        """
+        Rejestruje nowego użytkownika i zwraca token do konfiguracji TOTP
+        """
         try:
             result = await self.db.execute(select(User).where(User.username == user_data.username))
             if result.scalar_one_or_none():
@@ -95,7 +102,6 @@ class UserService:
                     detail="Database error",
                 )
 
-        return await self._create_tokens(new_user.username)
             setup_token = create_totp_setup_token(new_user.username)
 
             await self.log_service.log_action(
@@ -120,6 +126,9 @@ class UserService:
             raise
 
     async def login(self, user_data: UserLogin):
+        """
+        Logowanie użytkownika - zwraca setup token jeśli TOTP nie jest skonfigurowany
+        """
         user = await self._get_and_verify_user(user_data.username, user_data.password)
 
         if not user.totp_configured:
@@ -136,6 +145,9 @@ class UserService:
         )
 
     async def login_with_totp(self, user_data: UserLoginWithTOTP):
+        """
+        Logowanie z weryfikacją TOTP - zwraca access i refresh token
+        """
         try:
             user = await self._get_and_verify_user(user_data.username, user_data.password)
 
@@ -154,12 +166,25 @@ class UserService:
                 details={"method": "TOTP"}
             )
 
-        logger.info("User logged in: %s", user.username)
-        return await self._create_tokens(user.username)
+            logger.info("User logged in: %s", user.username)
+            return await self._create_tokens(user.username)
+        except HTTPException as e:
+            await self.log_service.log_action(
+                action="LOGIN",
+                username=user_data.username,
+                status="FAILED",
+                details={"error": e.detail, "method": "TOTP"}
+            )
+            raise
 
     async def refresh_access_token(self, refresh_token_request: RefreshTokenRequest) -> Token:
+        """
+        Odświeża access token używając refresh tokenu.
+        Refresh token pozostaje ten sam i jest ważny przez pełny okres od logowania.
+        """
         refresh_token_str = refresh_token_request.refresh_token
 
+        # Dekoduj refresh token
         username = decode_refresh_token(refresh_token_str)
         if not username:
             raise HTTPException(
@@ -168,6 +193,7 @@ class UserService:
                 headers={"WWW-Authenticate": "Bearer"},
             )
 
+        # Sprawdź czy token istnieje w bazie danych
         result = await self.db.execute(
             select(RefreshToken).where(RefreshToken.token == refresh_token_str)
         )
@@ -180,6 +206,7 @@ class UserService:
                 headers={"WWW-Authenticate": "Bearer"},
             )
 
+        # Sprawdź czy token nie wygasł
         if token_obj.expires_at < now_utc():
             await self.db.delete(token_obj)
             await self.db.commit()
@@ -189,6 +216,7 @@ class UserService:
                 headers={"WWW-Authenticate": "Bearer"},
             )
 
+        # Sprawdź czy użytkownik istnieje
         result = await self.db.execute(select(User).where(User.username == username))
         user = result.scalar_one_or_none()
 
@@ -199,6 +227,7 @@ class UserService:
                 headers={"WWW-Authenticate": "Bearer"},
             )
 
+        # Wygeneruj tylko nowy access token (refresh token pozostaje ten sam)
         access_token = create_access_token(username)
 
         logger.info("Access token refreshed for user: %s", username)
@@ -209,22 +238,44 @@ class UserService:
             token_type="bearer"
         )
 
-    async def logout(self, refresh_token_request: RefreshTokenRequest) -> dict:
-        refresh_token_str = refresh_token_request.refresh_token
+    async def logout(self, username: str, ip_address: str = None):
+        """
+        Wylogowuje użytkownika przez usunięcie wszystkich jego refresh tokenów
+        """
+        try:
+            result = await self.db.execute(
+                select(RefreshToken).where(RefreshToken.user_username == username)
+            )
+            tokens = result.scalars().all()
 
-        result = await self.db.execute(
-            select(RefreshToken).where(RefreshToken.token == refresh_token_str)
-        )
-        token_obj = result.scalar_one_or_none()
+            for token in tokens:
+                await self.db.delete(token)
 
-        if token_obj:
-            await self.db.delete(token_obj)
             await self.db.commit()
-            logger.info("User logged out: %s", token_obj.user_username)
 
-        return {"message": "Logged out successfully"}
+            await self.log_service.log_action(
+                action="LOGOUT",
+                username=username,
+                status="SUCCESS",
+                details={"tokens_revoked": len(tokens), "ip_address": ip_address}
+            )
+
+            logger.info("User logged out: %s", username)
+            return {"message": "Logged out successfully"}
+        except Exception as e:
+            await self.log_service.log_action(
+                action="LOGOUT",
+                username=username,
+                status="FAILED",
+                details={"error": str(e), "ip_address": ip_address}
+            )
+            raise
 
     async def cleanup_expired_tokens(self) -> int:
+        """
+        Usuwa wygasłe refresh tokeny z bazy danych
+        Zwraca liczbę usuniętych tokenów
+        """
         result = await self.db.execute(
             select(RefreshToken).where(RefreshToken.expires_at < now_utc())
         )
@@ -237,24 +288,4 @@ class UserService:
         await self.db.commit()
         logger.info("Cleaned up %d expired refresh tokens", count)
         return count
-            token = create_access_token(user.username)
-            return Token(access_token=token, token_type="bearer")
-        except HTTPException as e:
-            await self.log_service.log_action(
-                action="LOGIN",
-                username=user_data.username,
-                status="FAILED",
-                details={"error": e.detail, "method": "TOTP"}
-            )
-            raise
-
-    async def logout(self, username: str, ip_address: str = None):
-        # REAL LOGIC TO HANDLE LOGOUT CAN BE IMPLEMENTED HERE
-
-        await self.log_service.log_action(
-            action="LOGOUT",
-            username=username,
-            status="SUCCESS",
-            details={"ip_address": ip_address},
-        )
 
