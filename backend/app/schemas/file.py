@@ -16,3 +16,12 @@ class FileItem(BaseModel):
     is_favorite: bool
     created_at: datetime
     updated_at: datetime
+
+
+class FileSetIsFavorite(BaseModel):
+    file_id: str
+    is_favorite: bool
+
+
+class FileDownloadManyFiles(BaseModel):
+    file_ids: list[str]

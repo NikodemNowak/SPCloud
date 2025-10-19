@@ -44,9 +44,14 @@ class User(Base):
     username = Column(String, primary_key=True, index=True)
     hashed_password = Column(String)
     user_type = Column(String, default="regular")  # 'admin', 'regular'
+    max_storage_mb = Column(Integer, default=100)  # Default 100 MB
+    used_storage_mb = Column(Integer, default=0)  # Used storage in MB
+    totp_secret = Column(String, nullable=True)
+    totp_configured = Column(Boolean, default=False)
 
     files = relationship("FileStorage", back_populates="user")
     refresh_tokens = relationship("RefreshToken", back_populates="user", cascade="all, delete-orphan")
+    logs = relationship("LogEntry", back_populates="user")
 
 
 class RefreshToken(Base):
@@ -64,7 +69,10 @@ class LogEntry(Base):
     __tablename__ = "logs"
     id = Column(UUID(as_uuid=True), primary_key=True, index=True)
     action = Column(String)
-    username = Column(String, ForeignKey("users.username"))
-    file_id = Column(UUID(as_uuid=True), ForeignKey("files.id"), nullable=True)
+    status = Column(String)
+    username = Column(String, ForeignKey("users.username", ondelete="CASCADE"), nullable=False)
+    file_id = Column(UUID(as_uuid=True), nullable=True)
     timestamp = Column(TIMESTAMP(timezone=True))
     details = Column(String, nullable=True)
+
+    user = relationship("User", back_populates="logs")

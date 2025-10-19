@@ -129,3 +129,13 @@ def decode_refresh_token(token: str) -> Optional[str]:
         return str(payload.get("sub"))
     except JWTError:
         return None
+
+def create_totp_setup_token(username: str) -> str:
+    expire = datetime.now(timezone.utc) + timedelta(minutes=15)
+    to_encode = {
+        "sub": username,
+        "exp": expire,
+        "type": "totp_setup"
+    }
+    signing_key, alg = _jwt_keys_and_alg()
+    return jwt.encode(to_encode, signing_key, algorithm=alg)

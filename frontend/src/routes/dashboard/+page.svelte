@@ -3,6 +3,7 @@
     import logoUrl from '$lib/assets/logo.svg';
     import FuzzySearch from 'fuzzy-search';
     import StorageProgress from '../../components/storage-progress.svelte';
+    import {onMount} from 'svelte';
 
     type FileDesc = {
         id: number;
@@ -17,16 +18,13 @@
     let isSortMenuOpen = $state(false);
     let sortBy = $state('name');
     let sortOrder = $state('asc');
+    let isDeleteConfirming = $state(false);
 
     let indeterminateCheckbox: HTMLInputElement;
 
     let selectedFileIds = $state<number[]>([]);
     let result = $state<FileDesc[]>([]);
-    let files = $state<FileDesc[]>([
-        {id: 1, name: 'Dokumenty.zip', is_favorite: true, date: new Date('2025-10-10'), size: 2048},
-        {id: 2, name: 'Prezentacja_projektu.pptx', is_favorite: false, date: new Date('2025-10-11'), size: 16952},
-        {id: 3, name: 'Raport_kwartalny.pdf', is_favorite: false, date: new Date('2025-10-08'), size: 9184312}
-    ]);
+    let files = $state<FileDesc[]>([]);
 
     // Storage tracking
     const MAX_STORAGE_MB = 100;
@@ -54,7 +52,9 @@
         .sort((a, b) => {
             let comparison: number = 0;
             if (sortBy === 'name') {
-                comparison = a.name.localeCompare(b.name, undefined, {numeric: true});
+                const nameA = a.name || '';
+                const nameB = b.name || '';
+                comparison = nameA.localeCompare(nameB, undefined, {numeric: true});
             } else if (sortBy === 'date') {
                 comparison = a.date.getTime() - b.date.getTime();
             } else if (sortBy === 'size') {
@@ -82,10 +82,48 @@
 
     function toggleFavorite(fileId: number) {
         const file = files.find((f) => f.id === fileId);
-        if (file) {
-            file.is_favorite = !file.is_favorite;
-            files = [...files];
+        if (!file) return;
+
+        const newFavoriteStatus = !file.is_favorite;
+        const token = JSON.parse(window.localStorage.getItem('token') || '""');
+
+        if (!token) {
+            console.error('Brak tokena - przekierowanie na /login');
+            window.location.href = '/login';
+            return;
         }
+
+        fetch('http://localhost:8000/api/v1/files/change-is-favorite', {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                file_id: fileId,
+                is_favorite: newFavoriteStatus
+            }),
+        }).then((response) => {
+            if (response.status === 401 || response.status === 403) {
+                console.error('Token nieprawidłowy - przekierowanie na /login');
+                window.localStorage.removeItem('token');
+                window.location.href = '/login';
+                return;
+            }
+
+            if (!response.ok) {
+                throw new Error('Failed to change favorite status');
+            }
+            return response.json();
+        }).then((data) => {
+            if (data) {
+                console.log('Status ulubionego zmieniony pomyślnie:', data);
+                file.is_favorite = newFavoriteStatus;
+                files = [...files];
+            }
+        }).catch((error) => {
+            console.error('Błąd podczas zmiany statusu ulubionego:', error);
+        });
     }
 
     function toggleSelectAll() {
@@ -98,11 +136,108 @@
 
     function handleDownload() {
         console.log('Pobieranie plików o ID:', selectedFileIds);
+
+        if (selectedFileIds.length === 1) {
+            const token = JSON.parse(window.localStorage.getItem('token') || '""');
+
+            if (!token) {
+                console.error('Brak tokena - przekierowanie na /login');
+                window.location.href = '/login';
+                return;
+            }
+
+            const fileId = selectedFileIds[0];
+            const file = files.find((f) => f.id === fileId);
+
+            fetch(`http://localhost:8000/api/v1/files/${fileId}/download`, {
+                method: 'GET',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                },
+            }).then((response) => {
+                if (response.status === 401 || response.status === 403) {
+                    console.error('Token nieprawidłowy - przekierowanie na /login');
+                    window.localStorage.removeItem('token');
+                    window.location.href = '/login';
+                    return;
+                }
+
+                if (!response.ok) {
+                    throw new Error('Download failed');
+                }
+                return response.blob();
+            }).then((blob) => {
+                if (blob) {
+                    const url = window.URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = file?.name || 'plik';
+                    document.body.appendChild(a);
+                    a.click();
+                    window.URL.revokeObjectURL(url);
+                    document.body.removeChild(a);
+                    console.log('Plik pobrany pomyślnie');
+                }
+            }).catch((error) => {
+                console.error('Błąd podczas pobierania pliku:', error);
+            });
+        } else {
+            //
+        }
+    }
+
+    function handleDelete() {
+        if (!isDeleteConfirming) {
+            isDeleteConfirming = true;
+            return;
+        }
+
+        const token = JSON.parse(window.localStorage.getItem('token') || '""');
+
+        if (!token) {
+            console.error('Brak tokena - przekierowanie na /login');
+            window.location.href = '/login';
+            return;
+        }
+
+        const deletePromises = selectedFileIds.map((fileId) => {
+            return fetch(`http://localhost:8000/api/v1/files/${fileId}`, {
+                method: 'DELETE',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                },
+            }).then((response) => {
+                if (response.status === 401 || response.status === 403) {
+                    console.error('Token nieprawidłowy - przekierowanie na /login');
+                    window.localStorage.removeItem('token');
+                    window.location.href = '/login';
+                    return;
+                }
+
+                if (!response.ok) {
+                    return response.json().then((data) => {
+                        console.error('Błąd podczas usuwania pliku:', data.detail || data);
+                    });
+                }
+            }).catch((error) => {
+                console.error('Błąd podczas usuwania pliku:', error);
+            });
+        });
+
+        Promise.all(deletePromises).then(() => {
+            fetchFiles();
+            selectedFileIds = [];
+            isDeleteConfirming = false;
+        });
+    }
+
+    function cancelDelete() {
+        isDeleteConfirming = false;
     }
 
     function handleLogout() {
         console.log('Wylogowywanie...');
-
+        window.localStorage.removeItem('token');
         window.location.href = '/login';
     }
 
@@ -110,9 +245,86 @@
         result = searcher.search(search);
     }
 
-    function handleFileUpload() {
-        console.log('WYSYLAM PLIK UWAGA KURWA');
+    function fetchFiles() {
+        const token = JSON.parse(window.localStorage.getItem('token') || '""');
+
+        fetch("http://localhost:8000/api/v1/files/", {
+            method: 'GET',
+            headers: {
+                'Authorization': `Bearer ${token}`,
+            },
+        }).then((response) => {
+            if (!response.ok) {
+                throw new Error('Failed to fetch files');
+            }
+            return response.json();
+        }).then((data) => {
+            console.log('Pobrano pliki:', data);
+
+            files = data.files.map((file: any) => ({
+                id: file.id,
+                name: file.name || 'Nieznany plik',
+                is_favorite: file.is_favorite || false,
+                date: new Date(file.updated_at.replace('Z', '')),
+                size: file.size || 0
+            }));
+        }).catch((error) => {
+            console.error('Błąd podczas pobierania plików:', error);
+        });
     }
+
+    function handleFileUpload(event: Event) {
+        const input = event.target as HTMLInputElement;
+        const files = input.files;
+
+        if (!files || files.length === 0) {
+            console.error('Nie wybrano plików');
+            return;
+        }
+
+        const token = JSON.parse(window.localStorage.getItem('token') || '""');
+
+        if (!token) {
+            console.error('Brak tokena - przekierowanie na /login');
+            window.location.href = '/login';
+            return;
+        }
+
+        const fileArray = Array.from(files);
+
+        async function uploadFilesSequentially() {
+            for (const file of fileArray) {
+                const formData = new FormData();
+                formData.append('file', file);
+
+                await fetch("http://localhost:8000/api/v1/files/upload", {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                    },
+                    body: formData,
+                }).then((response) => {
+                    if (!response.ok) {
+                        throw new Error('Upload failed');
+                    }
+                    return response.json();
+                }).then((data) => {
+                    console.log('Plik przesłany pomyślnie:', data);
+                }).catch((error) => {
+                    console.error('Błąd podczas przesyłania pliku:', error);
+                });
+            }
+
+            input.value = '';
+            fetchFiles();
+        }
+
+        uploadFilesSequentially();
+    }
+
+    onMount(() => {
+        fetchFiles();
+    });
 
     function formatBytes(bytes: number, decimals = 2) {
         if (bytes === 0) return '0 Bytes';
@@ -124,22 +336,6 @@
 
         return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i];
     }
-
-    // function downloadFile() {
-    // 	console.log('Pobieranie pliku...');
-    // }
-    //
-    // function uploadFile() {
-    // 	console.log('Przesyłanie pliku...');
-    // }
-    //
-    // function sendMultipleFiles() {
-    // 	console.log('Wysyłanie wielu plików (ZIP)...');
-    // }
-    //
-    // function refreshList() {
-    // 	console.log('Odświeżanie listy...');
-    // }
 </script>
 
 <div class="background-container">
@@ -184,7 +380,7 @@
                         <use href="{feather}#upload-cloud"/>
                     </svg>
                     <label for="upload" class="link-text">Prześlij plik</label>
-                    <input type="file" id="upload" onchange={handleFileUpload}/>
+                    <input type="file" id="upload" multiple onchange={handleFileUpload}/>
                 </div>
             </div>
         </nav>
@@ -365,7 +561,13 @@
                                 <use href="{feather}#file"/>
                             </svg>
                             <span class="file-name">{file.name}</span>
-                            <span class="file-date">{file.date.toLocaleDateString()}</span>
+                            <span class="file-date">{file.date.toLocaleDateString('pl-PL', {
+                                year: 'numeric',
+                                month: '2-digit',
+                                day: '2-digit',
+                                hour: '2-digit',
+                                minute: '2-digit'
+                            })}</span>
                             <span class="file-size">{formatBytes(file.size)}</span>
                         </li>
                     {/each}
@@ -384,6 +586,31 @@
                             Pobierz wiele plików
                         {/if}
                     </button>
+                </div>
+
+                <div class="delete-bar">
+                    {#if !isDeleteConfirming}
+                        <button class="delete-button" onclick={handleDelete}>
+                            <svg class="feather">
+                                <use href="{feather}#trash-2"/>
+                            </svg>
+                            Usuń
+                        </button>
+                    {:else}
+                        <div class="delete-confirm">
+                            <span class="delete-text">Czy na pewno?</span>
+                            <button class="confirm-yes" onclick={handleDelete} title="Tak, usuń">
+                                <svg class="feather">
+                                    <use href="{feather}#check"/>
+                                </svg>
+                            </button>
+                            <button class="confirm-no" onclick={cancelDelete} title="Nie, anuluj">
+                                <svg class="feather">
+                                    <use href="{feather}#x"/>
+                                </svg>
+                            </button>
+                        </div>
+                    {/if}
                 </div>
             {/if}
         </div>
@@ -477,7 +704,7 @@
         list-style: none;
         padding: 8px;
         width: 200px;
-        z-index: 10;
+        z-index: 1000;
         box-shadow: 0 8px 16px rgba(0, 0, 0, 0.3);
     }
 
@@ -940,6 +1167,90 @@
         stroke: #fff;
     }
 
+    .delete-bar {
+        position: absolute;
+        bottom: 24px;
+        right: 24px;
+        animation: slide-up-right 0.3s ease-out forwards;
+    }
+
+    .delete-button,
+    .delete-confirm {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 12px 24px;
+        color: #fff;
+        font-weight: 600;
+        border-radius: 8px;
+        box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+        transition: background-color 0.2s ease,
+        width 0.3s ease-out;
+        white-space: nowrap;
+        background-color: #dc2626;
+    }
+
+    .delete-button:hover,
+    .delete-confirm:hover {
+        background-color: #b91c1c;
+    }
+
+    .delete-button .feather {
+        stroke: #fff;
+    }
+
+    .delete-text {
+        color: #fff;
+        font-weight: 600;
+        font-size: 1rem;
+        white-space: nowrap;
+    }
+
+    .confirm-yes,
+    .confirm-no {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 24px;
+        height: 24px;
+        border-radius: 50%;
+        transition: all 0.2s ease;
+    }
+
+    .confirm-yes {
+        background-color: rgba(255, 255, 255, 0.2);
+    }
+
+    .confirm-yes:hover {
+        background-color: rgba(255, 255, 255, 0.3);
+    }
+
+    .confirm-no {
+        background-color: rgba(255, 255, 255, 0.2);
+    }
+
+    .confirm-no:hover {
+        background-color: rgba(255, 255, 255, 0.3);
+    }
+
+    .confirm-yes .feather,
+    .confirm-no .feather {
+        stroke: #fff;
+        width: 16px;
+        height: 16px;
+    }
+
+    @keyframes expand-confirm {
+        from {
+            opacity: 0;
+            width: 48px;
+        }
+        to {
+            opacity: 1;
+            width: auto;
+        }
+    }
+
     @keyframes slide-up {
         from {
             opacity: 0;
@@ -948,6 +1259,17 @@
         to {
             opacity: 1;
             transform: translate(-50%, 0);
+        }
+    }
+
+    @keyframes slide-up-right {
+        from {
+            opacity: 0;
+            transform: translateY(20px);
+        }
+        to {
+            opacity: 1;
+            transform: translateY(0);
         }
     }
 

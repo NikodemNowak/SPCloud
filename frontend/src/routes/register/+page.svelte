@@ -54,14 +54,22 @@
             },
             body: JSON.stringify({ username, password }),
         }).then((response) => {
+            if (!response.ok) {
+                throw new Error('Registration failed');
+            }
             return response.json();
         }).then((data) => {
-            console.log('Success:', data);
-            window.localStorage.setItem('token', JSON.stringify(data.access_token));
-            window.location.href = '/dashboard';
+            if (data.access_token) {
+                console.log('Success:', data);
+                window.localStorage.setItem('token', JSON.stringify(data.access_token));
+                window.location.href = '/dashboard';
+            } else {
+                registerFailedUsernameTaken = true;
+                console.error('Registration failed:', data.detail);
+            }
         }).catch((error) => {
             registerFailedUsernameTaken = true;
-            console.error('Error:', error);
+            console.error(error);
         })
     }
 </script>

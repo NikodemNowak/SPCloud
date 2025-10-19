@@ -15,3 +15,9 @@ class Token(BaseModel):
 
 class RefreshTokenRequest(BaseModel):
     refresh_token: str
+
+
+class UserLoginWithTOTP(BaseModel):
+    username: str
+    password: str
+    totp_code: str
