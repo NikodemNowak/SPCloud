@@ -1,7 +1,8 @@
 from typing import Union
 
 from db.database import get_db
-from fastapi import APIRouter, Depends, status, HTTPException
+from dependencies import get_current_user
+from fastapi import APIRouter, Depends, status, HTTPException, Request
 from schemas.totp import TOTPSetupToken
 from schemas.user import UserCreate, Token, UserLogin, UserLoginWithTOTP
 from services.user_service import UserService
@@ -11,9 +12,10 @@ router = APIRouter(prefix="/users", tags=["users"])
 
 
 @router.post("/register", response_model=TOTPSetupToken, status_code=status.HTTP_201_CREATED)
-async def register(user_data: UserCreate, db: AsyncSession = Depends(get_db)) -> TOTPSetupToken:
+async def register(user_data: UserCreate, request: Request, db: AsyncSession = Depends(get_db)) -> TOTPSetupToken:
     try:
-        return await UserService(db).register(user_data)
+        ip_address = request.client.host if request.client else None
+        return await UserService(db).register(user_data, ip_address)
     except HTTPException:
         raise
     except Exception as e:
@@ -41,3 +43,19 @@ async def login_with_totp(
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error during login: {str(e)}")
+
+
+@router.post("/logout", status_code=status.HTTP_200_OK)
+async def logout(
+        request: Request,
+        db: AsyncSession = Depends(get_db),
+        current_user: str = Depends(get_current_user)
+):
+    try:
+        ip_address = request.client.host if request.client else None
+        await UserService(db).logout(current_user, ip_address)
+        return {"message": "Logged out successfully"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error during logout: {str(e)}")
