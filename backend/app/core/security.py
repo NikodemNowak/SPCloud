@@ -1,5 +1,7 @@
 from datetime import datetime, timedelta, timezone
 from typing import Tuple, Optional
+import secrets
+import uuid
 
 from jose import jwt, JWTError
 from passlib.context import CryptContext
@@ -52,11 +54,35 @@ def create_access_token(
         "iat": int(now.timestamp()),
         "nbf": int(now.timestamp()),
         "exp": int(exp.timestamp()),
-        "jti": __import__("secrets").token_urlsafe(16),
+        "jti": secrets.token_urlsafe(16),
     }
 
     signing_key, alg = _jwt_keys_and_alg()
     return jwt.encode(payload, signing_key, algorithm=alg)
+
+
+def create_refresh_token(
+        subject: str,
+        *,
+        expires_delta: Optional[timedelta] = None
+) -> Tuple[str, datetime]:
+    now = now_utc()
+    exp = now + (expires_delta or timedelta(days=settings.JWT_REFRESH_EXPIRE_DAYS))
+    iss = getattr(settings, "JWT_ISSUER", None)
+
+    payload = {
+        "sub": subject,
+        "iss": iss,
+        "iat": int(now.timestamp()),
+        "nbf": int(now.timestamp()),
+        "exp": int(exp.timestamp()),
+        "jti": secrets.token_urlsafe(16),
+        "type": "refresh"
+    }
+
+    signing_key, alg = _jwt_keys_and_alg()
+    token = jwt.encode(payload, signing_key, algorithm=alg)
+    return token, exp
 
 
 def decode_access_token(token: str) -> Optional[Tuple[str, str]]:
@@ -76,5 +102,30 @@ def decode_access_token(token: str) -> Optional[Tuple[str, str]]:
             },
         )
         return str(payload.get("sub")), str(payload.get("exp"))
+    except JWTError:
+        return None
+
+
+def decode_refresh_token(token: str) -> Optional[str]:
+    try:
+        verify_key, alg = _jwt_keys_and_alg()
+        iss = getattr(settings, "JWT_ISSUER", None)
+
+        payload = jwt.decode(
+            token,
+            verify_key,
+            algorithms=[alg],
+            issuer=iss,
+            options={
+                "require_sub": True,
+                "require_iat": True,
+                "require_exp": True,
+            },
+        )
+
+        if payload.get("type") != "refresh":
+            return None
+
+        return str(payload.get("sub"))
     except JWTError:
         return None
