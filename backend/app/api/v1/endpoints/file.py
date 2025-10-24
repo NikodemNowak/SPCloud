@@ -135,3 +135,113 @@ async def set_favorite_file(file: FileSetIsFavorite,
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error uploading file: {str(e)}")
+
+
+@router.get("/{file_id}/versions", status_code=status.HTTP_200_OK)
+async def get_file_versions(
+        file_id: str,
+        user: User = Depends(get_current_user),
+        db: AsyncSession = Depends(get_db)
+):
+    """
+    Endpoint to get all versions of a file
+
+    - **file_id**: UUID of the file
+    """
+    try:
+        versions = await FileService(db).get_file_versions(file_id=file_id, username=user.username)
+        return {"file_id": file_id, "versions": versions}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error fetching versions: {str(e)}")
+
+
+@router.get("/{file_id}/versions/{version_number}", status_code=status.HTTP_200_OK)
+async def download_file_version(
+        file_id: str,
+        version_number: int,
+        request: Request,
+        user: User = Depends(get_current_user),
+        db: AsyncSession = Depends(get_db)
+):
+    """
+    Endpoint to download a specific version of a file
+
+    - **file_id**: UUID of the file
+    - **version_number**: Version number to download
+    """
+    try:
+        ip_address = request.client.host if request.client else None
+        file_obj, filename = await FileService(db).download_file_version(
+            file_id=file_id,
+            version_number=version_number,
+            username=user.username,
+            ip_address=ip_address
+        )
+
+        return StreamingResponse(
+            file_obj,
+            media_type="application/octet-stream",
+            headers={"Content-Disposition": f"attachment; filename*=UTF-8''{filename}"}
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error downloading version: {str(e)}")
+
+
+@router.post("/{file_id}/restore/{version_number}", status_code=status.HTTP_200_OK)
+async def restore_file_version(
+        file_id: str,
+        version_number: int,
+        request: Request,
+        user: User = Depends(get_current_user),
+        db: AsyncSession = Depends(get_db)
+):
+    """
+    Endpoint to restore a specific version of a file (changes current_version in database)
+
+    - **file_id**: UUID of the file
+    - **version_number**: Version number to restore
+    """
+    try:
+        ip_address = request.client.host if request.client else None
+        return await FileService(db).restore_file_version(
+            file_id=file_id,
+            version_number=version_number,
+            username=user.username,
+            ip_address=ip_address
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error restoring version: {str(e)}")
+
+
+@router.delete("/{file_id}/versions/{version_number}", status_code=status.HTTP_200_OK)
+async def delete_file_version(
+        file_id: str,
+        version_number: int,
+        request: Request,
+        user: User = Depends(get_current_user),
+        db: AsyncSession = Depends(get_db)
+):
+    """
+    Endpoint to delete a specific version of a file (cannot delete current version)
+
+    - **file_id**: UUID of the file
+    - **version_number**: Version number to delete
+    """
+    try:
+        ip_address = request.client.host if request.client else None
+        return await FileService(db).delete_file_version(
+            file_id=file_id,
+            version_number=version_number,
+            username=user.username,
+            ip_address=ip_address
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error deleting version: {str(e)}")
