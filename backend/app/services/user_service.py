@@ -1,3 +1,5 @@
+import logging
+
 from core.security import (
     hash_password,
     verify_password,
@@ -9,47 +11,22 @@ from core.security import (
 )
 from fastapi import HTTPException, status
 from models.models import User, RefreshToken
-from schemas.user import UserCreate, UserLogin, Token, RefreshTokenRequest, UserLoginWithTOTP
 from schemas.totp import TOTPSetupToken
+from schemas.user import UserCreate, UserLogin, Token, RefreshTokenRequest, UserLoginWithTOTP
 from services.log_service import LogService
 from services.totp_service import TOTPService
+from services.totp_service import create_token_pair
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
-import logging
-import uuid
-
 
 logger = logging.getLogger(__name__)
+
 
 class UserService:
     def __init__(self, db: AsyncSession):
         self.db = db
         self.log_service = LogService(db)
-
-    async def _create_tokens(self, username: str) -> Token:
-        """
-        Tworzy access token i refresh token dla użytkownika
-        """
-        access_token = create_access_token(username)
-        refresh_token_str, expires_at = create_refresh_token(username)
-
-        refresh_token_obj = RefreshToken(
-            id=uuid.uuid4(),
-            user_username=username,
-            token=refresh_token_str,
-            expires_at=expires_at,
-            created_at=now_utc()
-        )
-
-        self.db.add(refresh_token_obj)
-        await self.db.commit()
-
-        return Token(
-            access_token=access_token,
-            refresh_token=refresh_token_str,
-            token_type="bearer"
-        )
 
     async def _get_and_verify_user(self, username: str, password: str) -> User:
         """
@@ -166,8 +143,7 @@ class UserService:
                 details={"method": "TOTP"}
             )
 
-            logger.info("User logged in: %s", user.username)
-            return await self._create_tokens(user.username)
+            return await create_token_pair(self.db, user.username)
         except HTTPException as e:
             await self.log_service.log_action(
                 action="LOGIN",
@@ -288,4 +264,3 @@ class UserService:
         await self.db.commit()
         logger.info("Cleaned up %d expired refresh tokens", count)
         return count
-

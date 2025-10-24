@@ -1,13 +1,15 @@
+import uuid
 from io import BytesIO
 
 import pyotp
 import qrcode
+from core.security import create_access_token, create_refresh_token
+from core.security import now_utc
 from fastapi import HTTPException, status
-from models.models import User
+from models.models import User, RefreshToken
+from schemas.user import Token
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
-from core.security import create_access_token
-from schemas.user import Token
 
 
 class TOTPService:
@@ -104,8 +106,7 @@ class TOTPService:
         """Verify TOTP code, mark as configured and issue access token"""
         await self.verify_totp(username, code)
 
-        token = create_access_token(username)
-        return Token(access_token=token, token_type="bearer")
+        return await create_token_pair(self.db, username)
 
     async def check_totp_required(self, username: str) -> bool:
         """Check if user needs to configure TOTP"""
@@ -116,3 +117,25 @@ class TOTPService:
             return False
 
         return not user.totp_configured
+
+
+async def create_token_pair(db: AsyncSession, username: str) -> Token:
+    access_token = create_access_token(username)
+    refresh_token_str, expires_at = create_refresh_token(username)
+
+    refresh_token_obj = RefreshToken(
+        id=uuid.uuid4(),
+        user_username=username,
+        token=refresh_token_str,
+        expires_at=expires_at,
+        created_at=now_utc()
+    )
+
+    db.add(refresh_token_obj)
+    await db.commit()
+
+    return Token(
+        access_token=access_token,
+        refresh_token=refresh_token_str,
+        token_type="bearer"
+    )

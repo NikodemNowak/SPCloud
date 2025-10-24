@@ -1,7 +1,6 @@
+import secrets
 from datetime import datetime, timedelta, timezone
 from typing import Tuple, Optional
-import secrets
-import uuid
 
 from jose import jwt, JWTError
 from passlib.context import CryptContext
@@ -129,6 +128,7 @@ def decode_refresh_token(token: str) -> Optional[str]:
         return str(payload.get("sub"))
     except JWTError:
         return None
+
 
 def create_totp_setup_token(username: str) -> str:
     expire = datetime.now(timezone.utc) + timedelta(minutes=15)
