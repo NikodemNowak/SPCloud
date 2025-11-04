@@ -62,7 +62,6 @@
                         required
                 />
             </div>
-`
             <button type="submit" class="btn-login">Zaloguj się</button>
         </form>
         {#if loginFailed}
