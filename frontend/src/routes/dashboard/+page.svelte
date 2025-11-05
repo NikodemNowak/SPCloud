@@ -376,10 +376,15 @@
             <div>
                 <StorageProgress usedStorage={usedStorageMB} maxStorage={MAX_STORAGE_MB}/>
                 <div class="upload">
-                    <svg class="feather">
-                        <use href="{feather}#upload-cloud"/>
-                    </svg>
-                    <label for="upload" class="link-text">Prześlij plik</label>
+                    
+                    <label for="upload" class="upload-button">
+                        <svg class="feather">
+                            <use href="{feather}#upload-cloud"/>
+                        </svg>
+                        <div class="upload-label-text">
+                            Prześlij plik
+                        </div>
+                    </label>
                     <input type="file" id="upload" multiple onchange={handleFileUpload}/>
                 </div>
             </div>
@@ -623,6 +628,15 @@
         padding: 0;
         box-sizing: border-box;
         color: var(--text-primary);
+    }
+
+    .upload-button {
+        display: flex;
+        flex-direction: row;
+    }
+
+    .upload-label-text {
+        padding-left: 1rem;
     }
 
     .feather {
@@ -1295,6 +1309,7 @@
         }
 
         .logo-text,
+        .upload-label-text,
         .link-text {
             display: none;
         }

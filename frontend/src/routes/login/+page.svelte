@@ -67,7 +67,7 @@
             </div>
 
             <div class="form-group">
-                <label for="totp">Hasło</label>
+                <label for="totp">Kod:</label>
                 <input
                         type="text"
                         id="totp"

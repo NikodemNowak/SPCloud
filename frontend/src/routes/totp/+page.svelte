@@ -18,15 +18,6 @@
         qrCode = data.qr_code;
 
         console.log(data);
-
-            // if (data.access_token) {
-            //     console.log('Success:', data);
-            //     window.localStorage.setItem('token', JSON.stringify(data.access_token));
-            //     window.location.href = '/dashboard';
-            // } else {
-            //     registerFailedUsernameTaken = true;
-            //     console.error('Registration failed:', data.detail);
-            // }
     }
     onMount(() => {
         handleTotp();
@@ -50,6 +41,8 @@
 
         window.localStorage.setItem("access_token", data.access_token);
         window.localStorage.setItem("refresh_token", data.refresh_token);
+
+        window.location.href = "/dashboard";
     }
 </script>
 
@@ -64,11 +57,11 @@
         <form onsubmit={verifyTotp}>
             {#if qrCode}
                 <div class="form-group">
-                    <h2>Scan this QR code in your authenticator app</h2>
+                    <h2>Zeskanuj ten kod z użyciem aplikacji</h2>
                     <img src={qrCode} alt="TOTP QR code" width="100%"/>
                 </div>
             {:else}
-                <p>Loading QR code...</p>
+                <p>Ładowaine kodu QR...</p>
             {/if}  
             
             <div class="form-group">
@@ -76,13 +69,8 @@
                 <input type="text" id="code" bind:value={code}>
             </div>
 
-            <button type="submit" class="btn-login">Zarejestruj się</button>
+            <button type="submit" class="btn-login">Aktywuj</button>
         </form>
-
-        
-        <div class="register-section">
-            <a href="/login" class="btn-register"> Zaloguj się </a>
-        </div>
     </div>
 </div>
 
