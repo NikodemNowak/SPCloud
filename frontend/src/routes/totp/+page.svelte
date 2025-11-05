@@ -1,74 +1,23 @@
 <script lang="ts">
-    let username = '';
-    let password = '';
-    let repeatPassword = '';
+    import { onMount } from "svelte";
+    let code: string;
+    let qrCode: string | null = null;
 
-    let registerFailedUsernameTaken = false;
-    let registerFailedUsernameIsEmpty = false;
+    async function handleTotp() {
 
-    let registerFailedPasswordsNotSame = false;
-    let registerFailedPasswordIsEmpty = false;
-    let registerFailedPasswordTooShort = false;
-
-    /**
-     * Handles the login process when the "Login" button is clicked.
-     */
-    async function handleRegister() {
-
-        const MIN_PASSWORD_LENGTH = 2;
-
-        registerFailedUsernameTaken = false;
-        registerFailedUsernameIsEmpty = false;
-        registerFailedPasswordsNotSame = false;
-        registerFailedPasswordIsEmpty = false;
-        registerFailedPasswordTooShort = false;
-
-        if (username.length === 0) {
-            registerFailedUsernameIsEmpty = true;
-            console.error('Username is empty');
-            return;
-        }
-
-        if (password.length === 0) {
-            registerFailedPasswordIsEmpty = true;
-            console.error('Password is empty');
-            return;
-        }
-
-        if (password !== repeatPassword) {
-            registerFailedPasswordsNotSame = true;
-            console.error('Passwords do not match');
-            return;
-        }
-
-        if (password.length < MIN_PASSWORD_LENGTH) {
-            registerFailedPasswordTooShort = true;
-            console.error('Password is too short');
-            return;
-        }
-
-        const response = await fetch("http://localhost:8000/api/v1/users/register", {
+        const response = await fetch("http://localhost:8000/api/v1/totp/setup", {
             method: 'POST',
             headers: {
+                'Authorization': `Bearer ${window.localStorage.getItem("setup_token")}`,
                 'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({ username, password }),
+            }
         });
         
-        if (response.status !== 201) {
-            throw new Error('Registration failed');
-        }
-
         const data = await response.json();
 
-        if (data.setup_token) {
-            console.log("Success:", data);
-            window.localStorage.setItem("setup_token", data.setup_token);
-            window.location.href = "/totp";
-        } else {
-            registerFailedUsernameTaken = true;
-            console.error("Registration failed: ", data.detail);
-        }
+        qrCode = data.qr_code;
+
+        console.log(data);
 
             // if (data.access_token) {
             //     console.log('Success:', data);
@@ -79,6 +28,29 @@
             //     console.error('Registration failed:', data.detail);
             // }
     }
+    onMount(() => {
+        handleTotp();
+    });
+
+    let verifyTotp = async () => {
+        const response = await fetch("http://localhost:8000/api/v1/totp/verify", {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${window.localStorage.getItem("setup_token")}`,
+                'Content-Type': 'application/json',
+            },
+            body: `{"code": "${code}"}`
+        });
+
+        if (!response.ok) {
+            return;
+        }
+
+        const data = await response.json();
+
+        window.localStorage.setItem("access_token", data.access_token);
+        window.localStorage.setItem("refresh_token", data.refresh_token);
+    }
 </script>
 
 <div class="register-container">
@@ -87,54 +59,27 @@
             <h1>SPCloud</h1>
         </div>
 
-        <form onsubmit={handleRegister}>
-            <div class="form-group">
-                <label for="username">Login</label>
-                <input
-                        type="text"
-                        id="username"
-                        bind:value={username}
-                        placeholder="Wprowadź login"
-                        required
-                />
-            </div>
+        
 
+        <form onsubmit={verifyTotp}>
+            {#if qrCode}
+                <div class="form-group">
+                    <h2>Scan this QR code in your authenticator app</h2>
+                    <img src={qrCode} alt="TOTP QR code" width="100%"/>
+                </div>
+            {:else}
+                <p>Loading QR code...</p>
+            {/if}  
+            
             <div class="form-group">
-                <label for="password">Hasło</label>
-                <input
-                        type="password"
-                        id="password"
-                        bind:value={password}
-                        placeholder="Wprowadź hasło"
-                        required
-                />
-            </div>
-
-            <div class="form-group">
-                <label for="repeat-password">Powtórz hasło</label>
-                <input
-                        type="password"
-                        id="repeat-password"
-                        bind:value={repeatPassword}
-                        placeholder="Wprowadź hasło"
-                        required
-                />
+                <label for="code">Kod:</label>
+                <input type="text" id="code" bind:value={code}>
             </div>
 
             <button type="submit" class="btn-login">Zarejestruj się</button>
         </form>
-        {#if registerFailedUsernameTaken}
-            <div class="error">Ten login jest już użyty!</div>
-        {:else if registerFailedUsernameIsEmpty}
-            <div class="error">Login nie może być pusty!</div>
-        {:else if registerFailedPasswordIsEmpty}
-            <div class="error">Hasło nie może być puste!</div>
-        {:else if registerFailedPasswordsNotSame}
-            <div class="error">Hasła nie są takie same!</div>
-        {:else if registerFailedPasswordTooShort}
-            <div class="error">Hasło jest za krótkie!</div>
-        {/if}
 
+        
         <div class="register-section">
             <a href="/login" class="btn-register"> Zaloguj się </a>
         </div>
@@ -152,6 +97,7 @@
         padding: 0;
         overflow-x: hidden;
         position: relative;
+        color: #fff;
     }
 
     .login-panel {

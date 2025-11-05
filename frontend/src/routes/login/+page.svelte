@@ -1,27 +1,30 @@
 <script lang="ts">
     let username = '';
     let password = '';
+    let totp_code = '';
     let loginFailed = false;
 
     function handleLogin() {
         console.log('Login:', username);
 
         loginFailed = false;
-        fetch("http://localhost:8000/api/v1/users/login", {
+        fetch("http://localhost:8000/api/v1/users/login/totp", {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
             },
-            body: JSON.stringify({ username, password }),
-        }).then((response) => {
+            body: JSON.stringify({ username, password, totp_code }),
+        }).then(async (response) => {
             if (!response.ok) {
+                console.log(await response.json());
                 throw new Error('Login failed');
             }
             return response.json();
         }).then((data) => {
             if (data.access_token) {
                 console.log('Success:', data);
-                window.localStorage.setItem('token', JSON.stringify(data.access_token));
+                window.localStorage.setItem('access_token', data.access_token);
+                window.localStorage.setItem('refresh_token', data.refresh_token);
                 window.location.href = '/dashboard';
             } else {
                 loginFailed = true;
@@ -59,6 +62,17 @@
                         id="password"
                         bind:value={password}
                         placeholder="Wprowadź hasło"
+                        required
+                />
+            </div>
+
+            <div class="form-group">
+                <label for="totp">Hasło</label>
+                <input
+                        type="text"
+                        id="totp"
+                        bind:value={totp_code}
+                        placeholder="Wprowadź kod jednorazowy"
                         required
                 />
             </div>

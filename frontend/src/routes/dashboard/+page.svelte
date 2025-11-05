@@ -85,7 +85,7 @@
         if (!file) return;
 
         const newFavoriteStatus = !file.is_favorite;
-        const token = JSON.parse(window.localStorage.getItem('token') || '""');
+        const token = window.localStorage.getItem('access_token');
 
         if (!token) {
             console.error('Brak tokena - przekierowanie na /login');
@@ -106,7 +106,7 @@
         }).then((response) => {
             if (response.status === 401 || response.status === 403) {
                 console.error('Token nieprawidłowy - przekierowanie na /login');
-                window.localStorage.removeItem('token');
+                window.localStorage.removeItem('access_token');
                 window.location.href = '/login';
                 return;
             }
@@ -138,7 +138,7 @@
         console.log('Pobieranie plików o ID:', selectedFileIds);
 
         if (selectedFileIds.length === 1) {
-            const token = JSON.parse(window.localStorage.getItem('token') || '""');
+            const token = window.localStorage.getItem('access_token');
 
             if (!token) {
                 console.error('Brak tokena - przekierowanie na /login');
@@ -149,7 +149,7 @@
             const fileId = selectedFileIds[0];
             const file = files.find((f) => f.id === fileId);
 
-            fetch(`http://localhost:8000/api/v1/files/${fileId}/download`, {
+            fetch(`http://localhost:8000/api/v1/files/download/${fileId}`, {
                 method: 'GET',
                 headers: {
                     'Authorization': `Bearer ${token}`,
@@ -157,7 +157,7 @@
             }).then((response) => {
                 if (response.status === 401 || response.status === 403) {
                     console.error('Token nieprawidłowy - przekierowanie na /login');
-                    window.localStorage.removeItem('token');
+                    window.localStorage.removeItem('access_token');
                     window.location.href = '/login';
                     return;
                 }
@@ -192,7 +192,7 @@
             return;
         }
 
-        const token = JSON.parse(window.localStorage.getItem('token') || '""');
+        const token = window.localStorage.getItem('access_token');
 
         if (!token) {
             console.error('Brak tokena - przekierowanie na /login');
@@ -209,7 +209,7 @@
             }).then((response) => {
                 if (response.status === 401 || response.status === 403) {
                     console.error('Token nieprawidłowy - przekierowanie na /login');
-                    window.localStorage.removeItem('token');
+                    window.localStorage.removeItem('access_token');
                     window.location.href = '/login';
                     return;
                 }
@@ -237,7 +237,7 @@
 
     function handleLogout() {
         console.log('Wylogowywanie...');
-        window.localStorage.removeItem('token');
+        window.localStorage.removeItem('access_token');
         window.location.href = '/login';
     }
 
@@ -246,7 +246,7 @@
     }
 
     function fetchFiles() {
-        const token = JSON.parse(window.localStorage.getItem('token') || '""');
+        const token = window.localStorage.getItem('access_token');
 
         fetch("http://localhost:8000/api/v1/files/", {
             method: 'GET',
@@ -282,7 +282,7 @@
             return;
         }
 
-        const token = JSON.parse(window.localStorage.getItem('token') || '""');
+        const token = window.localStorage.getItem('access_token');
 
         if (!token) {
             console.error('Brak tokena - przekierowanie na /login');
