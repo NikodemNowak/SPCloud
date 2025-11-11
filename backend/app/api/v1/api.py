@@ -1,6 +1,6 @@
 from fastapi import APIRouter
 
-from .endpoints import file, user, totp
+from .endpoints import file, user, totp, logs
 
 api_router = APIRouter()
 
@@ -8,3 +8,4 @@ api_router = APIRouter()
 api_router.include_router(file.router)
 api_router.include_router(user.router)
 api_router.include_router(totp.router)
+api_router.include_router(logs.router)

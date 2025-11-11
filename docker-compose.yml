@@ -57,7 +57,7 @@ services:
     ports:
       - "${POSTGRES_PORT}:5432"   # hostowy port (np. 5433)
     volumes:
-      - db_data:/var/lib/postgresql/data
+      - db_data:/var/lib/postgresql
     networks:
       - spcloud_network
 
