@@ -134,18 +134,23 @@
         }
     }
 
-    function handleDownload() {
+    async function handleDownload() {
         console.log('Pobieranie plików o ID:', selectedFileIds);
 
+        const token = window.localStorage.getItem('access_token');
+
+        if (!token) {
+            console.error('Brak tokena - przekierowanie na /login');
+            window.location.href = '/login';
+            return;
+        }
+
+        if(selectedFileIds.length < 1) {
+            console.error("Nie wybrano plików");
+            return;
+        }
+
         if (selectedFileIds.length === 1) {
-            const token = window.localStorage.getItem('access_token');
-
-            if (!token) {
-                console.error('Brak tokena - przekierowanie na /login');
-                window.location.href = '/login';
-                return;
-            }
-
             const fileId = selectedFileIds[0];
             const file = files.find((f) => f.id === fileId);
 
@@ -182,7 +187,36 @@
                 console.error('Błąd podczas pobierania pliku:', error);
             });
         } else {
-            //
+            
+            let fileIds = selectedFileIds.map(value => value);
+            console.log(JSON.stringify(fileIds));
+            let result = await fetch('http://localhost:8000/api/v1/files/download', {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${localStorage.getItem('access_token')}`,
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    file_ids: fileIds
+                })
+            });
+
+            let blob = await result.blob();
+
+            if (blob) {
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'download.zip';
+                document.body.appendChild(a);
+                a.click();
+                window.URL.revokeObjectURL(url);
+                document.body.removeChild(a);
+                console.log('Plik pobrany pomyślnie');
+            }
+
+
+
         }
     }
 
