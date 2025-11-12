@@ -364,11 +364,13 @@ class FileService:
                     size += file_record.size
 
                     bucket_name = f"user-{username}"
-                    file_key = file_record.name
+                    current_version_number = file_record.current_version
+
+                    versioned_filename = self._build_versioned_filename(file_record.name, current_version_number)
 
                     try:
                         file_obj = BytesIO()
-                        s3.download_fileobj(bucket_name, file_key, file_obj)
+                        s3.download_fileobj(bucket_name, versioned_filename, file_obj)
                         file_obj.seek(0)
                         zip_file.writestr(file_record.name, file_obj.read())
                     except Exception as e:

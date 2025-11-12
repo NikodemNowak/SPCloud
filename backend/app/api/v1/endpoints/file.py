@@ -69,7 +69,7 @@ async def download_file(
         raise HTTPException(status_code=500, detail=f"Error uploading file: {str(e)}")
 
 
-@router.get("/download", status_code=status.HTTP_200_OK)
+@router.post("/download", status_code=status.HTTP_200_OK)
 async def download_many_files(
         files: FileDownloadManyFiles,
         request: Request,
@@ -78,7 +78,7 @@ async def download_many_files(
 ):
     """
     Endpoint to download multiple files as a ZIP archive
-    - **files**: Object containing list of file IDs to download
+    - **files**: Object containing a list of file IDs to download
     """
     ip_address = request.client.host if request.client else None
     zip_obj, zip_filename = await FileService(db).get_many_files(file_ids=files.file_ids, username=user.username,
