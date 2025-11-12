@@ -25,6 +25,8 @@
     let selectedFileIds = $state<number[]>([]);
     let result = $state<FileDesc[]>([]);
     let files = $state<FileDesc[]>([]);
+    let isDownloading = $state(false);
+    let downloadingText = $state('');
 
     // Storage tracking
     const MAX_STORAGE_MB = 100;
@@ -145,33 +147,44 @@
             return;
         }
 
-        if(selectedFileIds.length < 1) {
+        if (selectedFileIds.length < 1) {
             console.error("Nie wybrano plików");
             return;
         }
 
-        if (selectedFileIds.length === 1) {
-            const fileId = selectedFileIds[0];
-            const file = files.find((f) => f.id === fileId);
+        isDownloading = true;
+        downloadingText = '';
 
-            fetch(`http://localhost:8000/api/v1/files/download/${fileId}`, {
-                method: 'GET',
-                headers: {
-                    'Authorization': `Bearer ${token}`,
-                },
-            }).then((response) => {
+        const dotsInterval = setInterval(() => {
+            downloadingText = downloadingText.length >= 3 ? '' : downloadingText + '.';
+        }, 500);
+
+        try {
+            if (selectedFileIds.length === 1) {
+                const fileId = selectedFileIds[0];
+                const file = files.find((f) => f.id === fileId);
+
+                const response = await fetch(`http://localhost:8000/api/v1/files/download/${fileId}`, {
+                    method: 'GET',
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                    },
+                });
+
                 if (response.status === 401 || response.status === 403) {
                     console.error('Token nieprawidłowy - przekierowanie na /login');
                     window.localStorage.removeItem('access_token');
                     window.location.href = '/login';
+                    clearInterval(dotsInterval);
+                    isDownloading = false;
                     return;
                 }
 
                 if (!response.ok) {
                     throw new Error('Download failed');
                 }
-                return response.blob();
-            }).then((blob) => {
+
+                const blob = await response.blob();
                 if (blob) {
                     const url = window.URL.createObjectURL(blob);
                     const a = document.createElement('a');
@@ -183,40 +196,43 @@
                     document.body.removeChild(a);
                     console.log('Plik pobrany pomyślnie');
                 }
-            }).catch((error) => {
-                console.error('Błąd podczas pobierania pliku:', error);
-            });
-        } else {
-            
-            let fileIds = selectedFileIds.map(value => value);
-            console.log(JSON.stringify(fileIds));
-            let result = await fetch('http://localhost:8000/api/v1/files/download', {
-                method: 'POST',
-                headers: {
-                    'Authorization': `Bearer ${localStorage.getItem('access_token')}`,
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    file_ids: fileIds
-                })
-            });
+            } else {
+                let fileIds = selectedFileIds.map(value => value);
+                console.log(JSON.stringify(fileIds));
+                let result = await fetch('http://localhost:8000/api/v1/files/download', {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${localStorage.getItem('access_token')}`,
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        file_ids: fileIds
+                    })
+                });
 
-            let blob = await result.blob();
+                let blob = await result.blob();
 
-            if (blob) {
-                const url = window.URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = 'download.zip';
-                document.body.appendChild(a);
-                a.click();
-                window.URL.revokeObjectURL(url);
-                document.body.removeChild(a);
-                console.log('Plik pobrany pomyślnie');
+                if (blob) {
+                    const url = window.URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = 'download.zip';
+                    document.body.appendChild(a);
+                    a.click();
+                    window.URL.revokeObjectURL(url);
+                    document.body.removeChild(a);
+                    console.log('Plik pobrany pomyślnie');
+                }
             }
-
-
-
+        } catch (error) {
+            console.error('Błąd podczas pobierania pliku:', error);
+        } finally {
+            clearInterval(dotsInterval);
+            downloadingText = ' zakończone';
+            setTimeout(() => {
+                isDownloading = false;
+                selectedFileIds = [];
+            }, 1000);
         }
     }
 
@@ -408,9 +424,10 @@
                 </ul>
             </div>
             <div>
-                <StorageProgress usedStorage={usedStorageMB} maxStorage={MAX_STORAGE_MB}/>
+                <StorageProgress usedStorage={usedStorageMB}
+                                 maxStorage={MAX_STORAGE_MB}/>
                 <div class="upload">
-                    
+
                     <label for="upload" class="upload-button">
                         <svg class="feather">
                             <use href="{feather}#upload-cloud"/>
@@ -419,7 +436,8 @@
                             Prześlij plik
                         </div>
                     </label>
-                    <input type="file" id="upload" multiple onchange={handleFileUpload}/>
+                    <input type="file" id="upload" multiple
+                           onchange={handleFileUpload}/>
                 </div>
             </div>
         </nav>
@@ -430,11 +448,13 @@
                     <svg class="feather search-icon">
                         <use href="{feather}#search"/>
                     </svg>
-                    <input placeholder="Search" type="text" bind:value={search} oninput={handleSearch}/>
+                    <input placeholder="Search" type="text" bind:value={search}
+                           oninput={handleSearch}/>
                 </div>
                 <div class="top-bar-actions">
                     <div class="sort-menu">
-                        <button class="sort-button" onclick={() => (isSortMenuOpen = !isSortMenuOpen)}>
+                        <button class="sort-button"
+                                onclick={() => (isSortMenuOpen = !isSortMenuOpen)}>
                             <svg class="feather">
                                 <use href="{feather}#sliders"/>
                             </svg>
@@ -548,7 +568,8 @@
                             </ul>
                         {/if}
                     </div>
-                    <button class="logout-button" onclick={handleLogout} title="Wyloguj się">
+                    <button class="logout-button" onclick={handleLogout}
+                            title="Wyloguj się">
                         <svg class="feather">
                             <use href="{feather}#log-out"/>
                         </svg>
@@ -615,11 +636,13 @@
 
             {#if selectedFileIds.length > 0}
                 <div class="download-bar">
-                    <button class="download-button" onclick={handleDownload}>
+                    <button class="download-button" onclick={handleDownload} disabled={isDownloading}>
                         <svg class="feather">
                             <use href="{feather}#download"/>
                         </svg>
-                        {#if selectedFileIds.length === 1}
+                        {#if isDownloading}
+                            Pobieranie{downloadingText}
+                        {:else if selectedFileIds.length === 1}
                             Pobierz
                         {:else}
                             Pobierz wiele plików
@@ -638,12 +661,14 @@
                     {:else}
                         <div class="delete-confirm">
                             <span class="delete-text">Czy na pewno?</span>
-                            <button class="confirm-yes" onclick={handleDelete} title="Tak, usuń">
+                            <button class="confirm-yes" onclick={handleDelete}
+                                    title="Tak, usuń">
                                 <svg class="feather">
                                     <use href="{feather}#check"/>
                                 </svg>
                             </button>
-                            <button class="confirm-no" onclick={cancelDelete} title="Nie, anuluj">
+                            <button class="confirm-no" onclick={cancelDelete}
+                                    title="Nie, anuluj">
                                 <svg class="feather">
                                     <use href="{feather}#x"/>
                                 </svg>
