@@ -28,9 +28,10 @@
     let isDownloading = $state(false);
     let downloadingText = $state('');
 
-    // Storage tracking
     const MAX_STORAGE_MB = 100;
-    const usedStorageMB = $derived(files.reduce((sum, file) => sum + (file.size / (1024 * 1024)), 0));
+    const usedStorageMB = $derived(
+        files.reduce((sum, file) => sum + (file.size / (1024 * 1024)), 0)
+    );
 
     const searcher = $derived(new FuzzySearch(Array.from(files), ['name'], {
         caseSensitive: false
@@ -229,9 +230,9 @@
         } finally {
             clearInterval(dotsInterval);
             downloadingText = ' zakończone';
+            selectedFileIds = [];
             setTimeout(() => {
                 isDownloading = false;
-                selectedFileIds = [];
             }, 1000);
         }
     }
@@ -636,7 +637,8 @@
 
             {#if selectedFileIds.length > 0}
                 <div class="download-bar">
-                    <button class="download-button" onclick={handleDownload} disabled={isDownloading}>
+                    <button class="download-button" onclick={handleDownload}
+                            disabled={isDownloading}>
                         <svg class="feather">
                             <use href="{feather}#download"/>
                         </svg>
