@@ -37,6 +37,33 @@
         caseSensitive: false
     }));
 
+
+    let refresh_access_token = async () => {
+        let response = await fetch('http://localhost:8000/api/v1/users/refresh', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                "refresh_token": localStorage.getItem('refresh_token')
+            })
+        });
+
+        if (response.ok) {
+            let data = await response.json();
+
+            if (data.access_token) {
+                localStorage.setItem('access_token', data.access_token);
+            }
+        } else {
+            localStorage.clear();
+            window.location.href = '/login';
+        }
+    }
+
+    setInterval(refresh_access_token, 600000);
+
+
     const displayedFiles = $derived(files
         .filter((file) => {
             if (search.length > 0) {
@@ -88,6 +115,7 @@
         if (!file) return;
 
         const newFavoriteStatus = !file.is_favorite;
+
         const token = window.localStorage.getItem('access_token');
 
         if (!token) {
@@ -374,6 +402,7 @@
     }
 
     onMount(() => {
+        refresh_access_token();
         fetchFiles();
     });
 
