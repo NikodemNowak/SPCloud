@@ -74,6 +74,26 @@ async def logout(
         raise HTTPException(status_code=500, detail=f"Error during logout: {str(e)}")
 
 
+@router.get("/me", status_code=status.HTTP_200_OK)
+async def get_current_user_info(
+        current_user: User = Depends(get_current_user)
+):
+    """
+    Zwraca informacje o aktualnym użytkowniku
+    """
+    try:
+        return {
+            "username": current_user.username,
+            "user_type": current_user.user_type,
+            "max_storage_mb": current_user.max_storage_mb,
+            "used_storage_mb": current_user.used_storage_mb,
+            "totp_configured": current_user.totp_configured
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error fetching user info: {str(e)}")
+
 @router.get("/isadmin", status_code=status.HTTP_200_OK)
 async def is_admin(
         current_user: User = Depends(get_current_user)

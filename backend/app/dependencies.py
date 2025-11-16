@@ -46,15 +46,37 @@ async def get_user_for_totp_setup(token: str = Depends(oauth2_scheme), db: Async
         headers={"WWW-Authenticate": "Bearer"},
     )
 
+    expired_exception = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Setup token expired. Please request a new one.",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+
     try:
         signing_key, alg = _jwt_keys_and_alg()
-        payload = jwt.decode(token, signing_key, algorithms=[alg])
+        payload = jwt.decode(
+            token,
+            signing_key,
+            algorithms=[alg],
+            options={
+                "require_sub": True,
+                "require_exp": True,
+            }
+        )
         username: str = payload.get("sub")
         token_type: str = payload.get("type")
+        exp: int = payload.get("exp")
 
         if username is None or token_type != "totp_setup":
             raise credentials_exception
-    except JWTError:
+
+        if exp < now_utc().timestamp():
+            raise expired_exception
+
+    except JWTError as e:
+        error_msg = str(e).lower()
+        if "expired" in error_msg or "signature has expired" in error_msg:
+            raise expired_exception
         raise credentials_exception
 
     result = await db.execute(select(User).where(User.username == username))

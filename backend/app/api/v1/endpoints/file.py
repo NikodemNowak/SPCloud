@@ -3,7 +3,7 @@ from dependencies import get_current_user
 from fastapi import APIRouter, UploadFile, File, HTTPException, Depends, status, Request
 from fastapi.responses import StreamingResponse
 from models.models import User
-from schemas.file import FileSetIsFavorite, FileDownloadManyFiles
+from schemas.file import FileSetIsFavorite, FileDownloadManyFiles, StorageInfo
 from services.file_service import FileService
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -39,6 +39,36 @@ async def list_files(db: AsyncSession = Depends(get_db),
     """
     files = await FileService(db).list_files(username=user.username)
     return {"files": files}
+
+
+@router.get("/me", status_code=status.HTTP_200_OK, response_model=StorageInfo)
+async def get_my_storage_info(
+        user: User = Depends(get_current_user),
+        db: AsyncSession = Depends(get_db)
+):
+    """
+    Endpoint returning storage information about the current user
+
+    Returns:
+    - **username**: Username
+    - **total_files**: Number of files
+    - **total_size_bytes**: Total size of files in bytes
+    - **total_size_mb**: Total size of files in MB
+    - **max_storage_mb**: Maximum storage limit in MB
+    - **used_storage_mb**: Used storage in MB
+    - **available_storage_mb**: Available storage in MB
+    - **storage_usage_percentage**: Storage usage percentage
+    - **total_favorite_files**: Number of favorite files
+    - **total_versions**: Total number of file versions
+    - **total_versions_size_bytes**: Total size of all versions in bytes
+    - **total_versions_size_mb**: Total size of all versions in MB
+    """
+    try:
+        return await FileService(db).get_user_storage_info(username=user.username)
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error fetching storage info: {str(e)}")
 
 
 @router.get("/download/{file_id}", status_code=status.HTTP_200_OK)

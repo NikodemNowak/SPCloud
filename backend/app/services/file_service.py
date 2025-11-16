@@ -21,6 +21,30 @@ class FileService:
         self.db = db
         self.log_service = LogService(db)
 
+    async def _recalculate_user_storage(self, username: str) -> float:
+        """
+        Przelicza rzeczywiste wykorzystanie miejsca użytkownika i aktualizuje w bazie
+        Zwraca aktualną wartość w MiB
+        """
+        all_versions_query = select(FileVersion).join(
+            FileStorage, FileVersion.file_id == FileStorage.id
+        ).where(FileStorage.owner == username)
+        result = await self.db.execute(all_versions_query)
+        all_versions = result.scalars().all()
+
+        total_size_bytes = sum(version.size for version in all_versions)
+        actual_used_storage_mb = total_size_bytes / (1024 * 1024)
+
+        result = await self.db.execute(select(User).where(User.username == username))
+        user = result.scalar_one_or_none()
+
+        if user:
+            user.used_storage_mb = actual_used_storage_mb
+            self.db.add(user)
+            await self.db.commit()
+
+        return actual_used_storage_mb
+
     def _build_versioned_filename(self, original_filename: str, version_number: int) -> str:
         """
         Tworzy nazwę pliku z numerem wersji: filename_v1.txt
@@ -117,12 +141,9 @@ class FileService:
                         detail=f"Database error: {str(e)}",
                     )
 
-                # Zaktualizuj użyte miejsce (dodaj różnicę)
-                size_diff = file_size / (1024 * 1024)
-                user.used_storage_mb += size_diff
+                # Przelicz rzeczywiste wykorzystanie miejsca
                 try:
-                    self.db.add(user)
-                    await self.db.commit()
+                    await self._recalculate_user_storage(username)
                 except Exception as e:
                     await self.db.rollback()
                     raise HTTPException(
@@ -205,12 +226,9 @@ class FileService:
                         detail=f"Database error: {str(e)}",
                     )
 
-                # Zaktualizuj użyte miejsce
-                user.used_storage_mb += file_size / (1024 * 1024)
+                # Przelicz rzeczywiste wykorzystanie miejsca
                 try:
-                    self.db.add(user)
-                    await self.db.commit()
-                    await self.db.refresh(user)
+                    await self._recalculate_user_storage(username)
                 except Exception as e:
                     await self.db.rollback()
                     raise HTTPException(
@@ -264,6 +282,70 @@ class FileService:
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail=f"Database error: {str(e)}",
+            )
+
+    async def get_user_storage_info(self, username: str) -> dict:
+        """
+        Pobiera statystyki przechowywania plików użytkownika
+        """
+        try:
+            result = await self.db.execute(select(User).where(User.username == username))
+            user = result.scalar_one_or_none()
+
+            if not user:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="User not found"
+                )
+
+            result = await self.db.execute(select(FileStorage).where(FileStorage.owner == username))
+            files = result.scalars().all()
+
+            total_files = len(files)
+            total_size_bytes = sum(file.size for file in files)
+
+            all_versions_query = select(FileVersion).join(
+                FileStorage, FileVersion.file_id == FileStorage.id
+            ).where(FileStorage.owner == username)
+            result = await self.db.execute(all_versions_query)
+            all_versions = result.scalars().all()
+
+            total_versions = len(all_versions)
+            total_versions_size_bytes = sum(version.size for version in all_versions)
+
+            actual_used_storage_mb = total_versions_size_bytes / (1024 * 1024)
+
+            if abs(user.used_storage_mb - actual_used_storage_mb) > 0.01:
+                user.used_storage_mb = actual_used_storage_mb
+                try:
+                    self.db.add(user)
+                    await self.db.commit()
+                except Exception as e:
+                    await self.db.rollback()
+
+            favorite_files = [file for file in files if file.is_favorite]
+            total_favorite_files = len(favorite_files)
+
+            return {
+                "username": username,
+                "total_files": total_files,
+                "total_size_bytes": total_size_bytes,
+                "total_size_mb": round(total_size_bytes / (1024 * 1024), 2),
+                "max_storage_mb": user.max_storage_mb,
+                "used_storage_mb": round(actual_used_storage_mb, 2),
+                "available_storage_mb": round(user.max_storage_mb - actual_used_storage_mb, 2),
+                "storage_usage_percentage": round((actual_used_storage_mb / user.max_storage_mb) * 100, 2) if user.max_storage_mb > 0 else 0,
+                "total_favorite_files": total_favorite_files,
+                "total_versions": total_versions,
+                "total_versions_size_bytes": total_versions_size_bytes,
+                "total_versions_size_mb": round(total_versions_size_bytes / (1024 * 1024), 2)
+            }
+        except HTTPException:
+            raise
+        except Exception as e:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Error fetching storage info: {str(e)}",
             )
 
     async def download_file(self, file_id: str, username: str, ip_address: str = None):
@@ -448,22 +530,6 @@ class FileService:
                     # Kontynuuj nawet jeśli usuwanie jednego pliku się nie powiedzie
                     print(f"Warning: Failed to delete version {version.version_number} from S3: {str(e)}")
 
-            # Zaktualizuj użyte miejsce
-            try:
-                user.used_storage_mb -= total_size / (1024 * 1024)
-                if user.used_storage_mb < 0:
-                    user.used_storage_mb = 0
-                self.db.add(user)
-                await self.db.commit()
-                await self.db.refresh(user)
-            except Exception as e:
-                await self.db.rollback()
-                raise HTTPException(
-                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                    detail=f"Failed to update user storage usage: {str(e)}"
-                )
-
-            # Usuń rekord z bazy (cascade usunie również wersje)
             try:
                 await self.db.delete(file_record)
                 await self.db.commit()
@@ -472,6 +538,15 @@ class FileService:
                 raise HTTPException(
                     status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                     detail=f"Failed to delete file from database: {str(e)}"
+                )
+
+            try:
+                await self._recalculate_user_storage(username)
+            except Exception as e:
+                await self.db.rollback()
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail=f"Failed to update user storage: {str(e)}"
                 )
 
             await self.log_service.log_action(
@@ -818,18 +893,18 @@ class FileService:
                     detail=f"Failed to delete file from S3: {str(e)}"
                 )
 
-            # Zaktualizuj użyte miejsce
-            result = await self.db.execute(select(User).where(User.username == username))
-            user = result.scalar_one_or_none()
-
-            user.used_storage_mb -= version.size / (1024 * 1024)
-            if user.used_storage_mb < 0:
-                user.used_storage_mb = 0
-
             try:
-                self.db.add(user)
                 await self.db.delete(version)
                 await self.db.commit()
+            except Exception as e:
+                await self.db.rollback()
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail=f"Failed to delete version from database: {str(e)}"
+                )
+
+            try:
+                await self._recalculate_user_storage(username)
             except Exception as e:
                 await self.db.rollback()
                 raise HTTPException(

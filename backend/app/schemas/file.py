@@ -25,3 +25,21 @@ class FileSetIsFavorite(BaseModel):
 
 class FileDownloadManyFiles(BaseModel):
     file_ids: list[str]
+
+
+class StorageInfo(BaseModel):
+    """Schema for user storage information"""
+    username: str
+    total_files: int
+    total_size_bytes: int
+    total_size_mb: float
+    max_storage_mb: int
+    used_storage_mb: float
+    available_storage_mb: float
+    storage_usage_percentage: float
+    total_favorite_files: int
+    total_versions: int
+    total_versions_size_bytes: int
+    total_versions_size_mb: float
+
+

@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, ForeignKey, Boolean, UniqueConstraint
+from sqlalchemy import Column, Integer, String, ForeignKey, Boolean, UniqueConstraint, Float
 from sqlalchemy.dialects.postgresql import UUID, TIMESTAMP
 from sqlalchemy.orm import declarative_base, relationship
 
@@ -44,8 +44,8 @@ class User(Base):
     username = Column(String, primary_key=True, index=True)
     hashed_password = Column(String)
     user_type = Column(String, default="regular")  # 'admin', 'regular'
-    max_storage_mb = Column(Integer, default=100)  # Default 100 MB
-    used_storage_mb = Column(Integer, default=0)  # Used storage in MB
+    max_storage_mb = Column(Integer, default=100)  # Default 100 MiB
+    used_storage_mb = Column(Float, default=0.0)  # Used storage in MiB
     totp_secret = Column(String, nullable=True)
     totp_configured = Column(Boolean, default=False)
 
