@@ -22,8 +22,8 @@ async def register(user_data: UserCreate, request: Request, db: AsyncSession = D
         raise HTTPException(status_code=500, detail=f"Error during registration: {str(e)}")
 
 
-@router.post("/login", response_model=Union[Token, TOTPSetupToken], status_code=status.HTTP_200_OK)
-async def login(user_data: UserLogin, db: AsyncSession = Depends(get_db)) -> Union[Token, TOTPSetupToken]:
+@router.post("/login", response_model=TOTPSetupToken, status_code=status.HTTP_200_OK)
+async def login(user_data: UserLogin, db: AsyncSession = Depends(get_db)) -> TOTPSetupToken:
     try:
         return await UserService(db).login(user_data)
     except HTTPException:
