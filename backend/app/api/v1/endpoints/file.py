@@ -18,8 +18,7 @@ async def upload_file(
         db: AsyncSession = Depends(get_db)
 ):
     """
-    Endpoint for uploading files
-
+    Endpoint to upload a file
     - **file**: File to upload
     """
     try:
@@ -35,7 +34,7 @@ async def upload_file(
 async def list_files(db: AsyncSession = Depends(get_db),
                      user: User = Depends(get_current_user)):
     """
-    Endpoint returning a list of all files
+    Endpoint to list files
     """
     files = await FileService(db).list_files(username=user.username)
     return {"files": files}
@@ -275,3 +274,4 @@ async def delete_file_version(
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error deleting version: {str(e)}")
+

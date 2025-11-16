@@ -22,9 +22,9 @@ async def download_logs(
         db: AsyncSession = Depends(get_db)
 ):
     """
-    Endpoint for downloading log files
+    Endpoint to download logs
 
-    - **limit**: Number of most recent log entries to include
+    - **limit**: Maximum number of logs to download
     """
 
     if not user.user_type == 'admin':
@@ -55,3 +55,4 @@ async def download_logs(
     except Exception as e:
         raise HTTPException(status_code=500,
                             detail=f"Error downloading logs: {str(e)}")
+

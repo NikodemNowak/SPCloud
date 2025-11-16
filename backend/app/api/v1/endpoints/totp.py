@@ -17,7 +17,7 @@ async def setup_totp(
         user: User = Depends(get_user_for_totp_setup),
         db: AsyncSession = Depends(get_db)
 ):
-    """Generate TOTP secret and QR code"""
+    """Endpoint to setup TOTP"""
     result = await TOTPService(db).generate_totp_secret(user.username)
 
     qr_bytes = result["qr_code"].getvalue()
@@ -36,7 +36,7 @@ async def verify_totp(
         user: User = Depends(get_user_for_totp_setup),
         db: AsyncSession = Depends(get_db)
 ) -> Token:
-    """Verify TOTP code and complete setup"""
+    """Endpoint to verify TOTP and return access and refresh tokens"""
     return await TOTPService(db).verify_and_issue_token(user.username, request.code)
 
 
@@ -45,6 +45,6 @@ async def totp_status(
         user: User = Depends(get_current_user),
         db: AsyncSession = Depends(get_db)
 ):
-    """Check if TOTP is configured"""
+    """Endpoint to check if TOTP is configured for the user"""
     needs_setup = await TOTPService(db).check_totp_required(user.username)
     return {"totp_configured": not needs_setup, "requires_setup": needs_setup}

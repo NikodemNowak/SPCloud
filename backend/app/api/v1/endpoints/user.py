@@ -13,6 +13,9 @@ router = APIRouter(prefix="/users", tags=["users"])
 
 @router.post("/register", response_model=TOTPSetupToken, status_code=status.HTTP_201_CREATED)
 async def register(user_data: UserCreate, request: Request, db: AsyncSession = Depends(get_db)) -> TOTPSetupToken:
+    """
+    Endpoint to register a new user and return a token to configure TOTP
+    """
     try:
         ip_address = request.client.host if request.client else None
         return await UserService(db).register(user_data, ip_address)
@@ -24,6 +27,10 @@ async def register(user_data: UserCreate, request: Request, db: AsyncSession = D
 
 @router.post("/login", response_model=TOTPSetupToken, status_code=status.HTTP_200_OK)
 async def login(user_data: UserLogin, db: AsyncSession = Depends(get_db)) -> TOTPSetupToken:
+    """
+    Endpoint to login a user and return a token to configure TOTP if TOTP is not configured,
+    otherwise returns an error with information about the need to verify TOTP
+    """
     try:
         return await UserService(db).login(user_data)
     except HTTPException:
@@ -37,6 +44,9 @@ async def login_with_totp(
         user_data: UserLoginWithTOTP,
         db: AsyncSession = Depends(get_db)
 ) -> Token:
+    """
+    Endpoint to login a user with TOTP and return access and refresh tokens
+    """
     try:
         return await UserService(db).login_with_totp(user_data)
     except HTTPException:
@@ -51,7 +61,7 @@ async def refresh_token(
         db: AsyncSession = Depends(get_db)
 ) -> Token:
     """
-    Odświeża access token używając refresh tokenu
+    Endpoint to refresh access token using refresh token
     """
     return await UserService(db).refresh_access_token(refresh_data)
 
@@ -63,7 +73,7 @@ async def logout(
         current_user: User = Depends(get_current_user)
 ):
     """
-    Wylogowuje użytkownika - usuwa wszystkie jego refresh tokeny
+    Endpoint to logout a user - delete all their refresh tokens
     """
     try:
         ip_address = request.client.host if request.client else None
@@ -79,7 +89,7 @@ async def get_current_user_info(
         current_user: User = Depends(get_current_user)
 ):
     """
-    Zwraca informacje o aktualnym użytkowniku
+    Endpoint to get current user info
     """
     try:
         return {
@@ -99,7 +109,7 @@ async def is_admin(
         current_user: User = Depends(get_current_user)
 ):
     """
-    Sprawdza czy aktualny użytkownik jest administratorem
+    Endpoint to check if current user is admin
     """
     try:
         return current_user.user_type == "admin"
@@ -107,3 +117,4 @@ async def is_admin(
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error checking admin status: {str(e)}")
+
