@@ -5,7 +5,7 @@
 
     async function handleTotp() {
 
-        const response = await fetch("http://localhost:8000/api/v1/totp/setup", {
+        const response = await fetch("https://localhost/api/v1/totp/setup", {
             method: 'POST',
             headers: {
                 'Authorization': `Bearer ${window.localStorage.getItem("setup_token")}`,
@@ -24,7 +24,7 @@
     });
 
     let verifyTotp = async () => {
-        const response = await fetch("http://localhost:8000/api/v1/totp/verify", {
+        const response = await fetch("https://localhost/api/v1/totp/verify", {
             method: 'POST',
             headers: {
                 'Authorization': `Bearer ${window.localStorage.getItem("setup_token")}`,

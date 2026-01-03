@@ -8,7 +8,7 @@
         console.log('Login:', username);
 
         loginFailed = false;
-        fetch("http://localhost:8000/api/v1/users/login/totp", {
+        fetch("https://localhost/api/v1/users/login/totp", {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',

@@ -39,7 +39,7 @@
 
 
     let refresh_access_token = async () => {
-        let response = await fetch('http://localhost:8000/api/v1/users/refresh', {
+        let response = await fetch('https://localhost/api/v1/users/refresh', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
@@ -124,7 +124,7 @@
             return;
         }
 
-        fetch('http://localhost:8000/api/v1/files/change-is-favorite', {
+        fetch('https://localhost/api/v1/files/change-is-favorite', {
             method: 'POST',
             headers: {
                 'Authorization': `Bearer ${token}`,
@@ -193,7 +193,7 @@
                 const fileId = selectedFileIds[0];
                 const file = files.find((f) => f.id === fileId);
 
-                const response = await fetch(`http://localhost:8000/api/v1/files/download/${fileId}`, {
+                const response = await fetch(`https://localhost/api/v1/files/download/${fileId}`, {
                     method: 'GET',
                     headers: {
                         'Authorization': `Bearer ${token}`,
@@ -228,7 +228,7 @@
             } else {
                 let fileIds = selectedFileIds.map(value => value);
                 console.log(JSON.stringify(fileIds));
-                let result = await fetch('http://localhost:8000/api/v1/files/download', {
+                let result = await fetch('https://localhost/api/v1/files/download', {
                     method: 'POST',
                     headers: {
                         'Authorization': `Bearer ${localStorage.getItem('access_token')}`,
@@ -280,7 +280,7 @@
         }
 
         const deletePromises = selectedFileIds.map((fileId) => {
-            return fetch(`http://localhost:8000/api/v1/files/${fileId}`, {
+            return fetch(`https://localhost/api/v1/files/${fileId}`, {
                 method: 'DELETE',
                 headers: {
                     'Authorization': `Bearer ${token}`,
@@ -327,7 +327,7 @@
     function fetchFiles() {
         const token = window.localStorage.getItem('access_token');
 
-        fetch("http://localhost:8000/api/v1/files/", {
+        fetch("https://localhost/api/v1/files/", {
             method: 'GET',
             headers: {
                 'Authorization': `Bearer ${token}`,
@@ -376,7 +376,7 @@
                 const formData = new FormData();
                 formData.append('file', file);
 
-                await fetch("http://localhost:8000/api/v1/files/upload", {
+                await fetch("https://localhost/api/v1/files/upload", {
                     method: 'POST',
                     headers: {
                         'Authorization': `Bearer ${token}`,
