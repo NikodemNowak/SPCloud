@@ -27,6 +27,7 @@
     let files = $state<FileDesc[]>([]);
     let isDownloading = $state(false);
     let downloadingText = $state('');
+    let isAdmin = $state(false);
 
     const MAX_STORAGE_MB = 100;
     const usedStorageMB = $derived(
@@ -58,6 +59,25 @@
         } else {
             localStorage.clear();
             window.location.href = '/login';
+        }
+    }
+
+    async function checkAdminStatus() {
+        const token = window.localStorage.getItem('access_token');
+        if (!token) return;
+
+        try {
+            const response = await fetch('https://localhost/api/v1/users/isadmin', {
+                method: 'GET',
+                headers: {
+                    'Authorization': `Bearer ${token}`
+                }
+            });
+            if (response.ok) {
+                isAdmin = await response.json();
+            }
+        } catch (error) {
+            console.error('Error checking admin status:', error);
         }
     }
 
@@ -404,6 +424,7 @@
     onMount(() => {
         refresh_access_token();
         fetchFiles();
+        checkAdminStatus();
     });
 
     function formatBytes(bytes: number, decimals = 2) {
@@ -451,6 +472,18 @@
                             <span class="link-text">Najnowsze</span>
                         </button>
                     </li>
+                    {#if isAdmin}
+                        <li>
+                            <a href="/admin/logs" class="admin-link">
+                                <button>
+                                    <svg class="feather">
+                                        <use href="{feather}#shield"/>
+                                    </svg>
+                                    <span class="link-text">Panel Admina</span>
+                                </button>
+                            </a>
+                        </li>
+                    {/if}
                 </ul>
             </div>
             <div>
@@ -1029,9 +1062,10 @@
         gap: 8px;
     }
 
-    .nav-links svg {
-        color: var(--text-secondary);
-        transition: color 0.2s ease;
+        .admin-link {
+        text-decoration: none;
+        display: block;
+        width: 100%;
     }
 
     .nav-links li button {
