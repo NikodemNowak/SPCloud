@@ -17,7 +17,7 @@
 \usepackage{hyperref}
 \usepackage{float}
 \usepackage{tikz}
-\usetikzlibrary{shapes, arrows, positioning, calc, shapes.geometric, backgrounds}
+\usetikzlibrary{shapes, arrows, positioning, calc, shapes.geometric, backgrounds, fit}
 
 \tikzstyle{bpmn.start} = [circle, fill=green!30, draw=black, minimum width=12mm]
 \tikzstyle{bpmn.activity} = [rectangle, fill=blue!15, draw=black, rounded corners, minimum width=15mm, minimum height=8mm]
@@ -97,7 +97,7 @@
 \midrule
 \textbf{Backend} & FastAPI, Python 3.13, SQLAlchemy (async) \\
 \midrule
-\textbf{Baza danych} & PostgreSQL 18 \\
+\textbf{Baza danych} & PostgreSQL 17 \\
 \midrule
 \textbf{Object Storage} & MinIO (S3-compatible) \\
 \midrule
@@ -156,36 +156,52 @@ System jest uruchamiany kontenerowo (Docker Compose) i składa się z odseparowa
 
 \begin{figure}[H]
 \centering
-\begin{tikzpicture}[node distance=1.5cm, auto]
-\node[rectangle, draw, fill=blue!20, rounded corners] (user) {Użytkownik};
-\node[rectangle, draw, fill=orange!20, rounded corners, right=of user] (nginx) {NGINX};
-\node[rectangle, draw, fill=green!20, rounded corners, right=of nginx] (frontend) {Frontend (SvelteKit)};
-\node[rectangle, draw, fill=purple!20, rounded corners, below=of nginx] (backend) {Backend (FastAPI)};
+\begin{tikzpicture}[node distance=1.8cm, auto]
+% Warstwa użytkownika
+\node[rectangle, draw, fill=blue!20, rounded corners, minimum width=3cm, minimum height=1cm] (browser) {Przeglądarka};
+\node[above=0.3cm of browser, font=\footnotesize] {Użytkownik};
 
-\node[rectangle, draw, fill=blue!10, rounded corners, below=of backend, yshift=0.5cm] (db) {PostgreSQL};
-\node[rectangle, draw, fill=yellow!20, rounded corners, right=of backend] (minio) {MinIO (S3)};
+% NGINX jako reverse proxy
+\node[rectangle, draw, fill=orange!20, rounded corners, minimum width=2.5cm, minimum height=1cm, below=of browser] (nginx) {NGINX};
+\node[right=0.2cm of nginx, font=\footnotesize, align=left] {Reverse Proxy\\(port 443)};
 
-\draw[->, thick] (user) -- (nginx);
-\draw[->, thick] (nginx) -- (frontend);
-\draw[->, thick] (nginx) |- (backend);
-\draw[->, thick] (backend) -- (db);
-\draw[->, thick] (backend) -- (minio);
+% Kontenery Docker
+\node[rectangle, draw, fill=green!20, rounded corners, minimum width=2.5cm, minimum height=1cm, below left=1.5cm and 0.5cm of nginx] (frontend) {Frontend};
+\node[below=0.1cm of frontend, font=\footnotesize] {SvelteKit};
 
-\node[below=0.3cm of backend, font=\footnotesize, align=center] {API REST\\JSON};
-\node[below=0.3cm of minio, font=\footnotesize, align=center] {S3 API\\Object Storage};
+\node[rectangle, draw, fill=purple!20, rounded corners, minimum width=2.5cm, minimum height=1cm, below right=1.5cm and 0.5cm of nginx] (backend) {Backend};
+\node[below=0.1cm of backend, font=\footnotesize] {FastAPI};
+
+% Baza i storage
+\node[rectangle, draw, fill=blue!10, rounded corners, minimum width=2cm, minimum height=0.8cm, below=2cm of backend, xshift=-1.5cm] (db) {PostgreSQL};
+\node[rectangle, draw, fill=yellow!20, rounded corners, minimum width=2cm, minimum height=0.8cm, below=2cm of backend, xshift=1.5cm] (minio) {MinIO};
+
+% Strzałki
+\draw[<->, thick] (browser) -- node[right, font=\footnotesize] {HTTPS} (nginx);
+\draw[->, thick] (nginx) -- node[left, font=\footnotesize, align=right] {/* (HTML/JS)} (frontend);
+\draw[->, thick] (nginx) -- node[right, font=\footnotesize, align=left] {/api/*} (backend);
+\draw[<->, thick] (backend) -- (db);
+\draw[<->, thick] (backend) -- (minio);
+
+% Ramka Docker
+\begin{scope}[on background layer]
+\node[rectangle, draw=gray, dashed, rounded corners, fit=(nginx)(frontend)(backend)(db)(minio), inner sep=0.5cm, label={[font=\footnotesize]above right:Docker Compose}] {};
+\end{scope}
 \end{tikzpicture}
 \caption{Architektura systemu SPCloud}
 \end{figure}
 
 Przepływ żądań przedstawia się następująco:
 \begin{enumerate}
-    \item Użytkownik wysyła żądanie do serwera NGINX
-    \item NGINX przekierowuje ruch do odpowiedniej usługi
-    \item Frontend obsługuje interfejs użytkownika
-    \item Backend przetwarza logikę biznesową
-    \item PostgreSQL przechowuje metadane i użytkowników
-    \item MinIO przechowuje rzeczywiste pliki
+    \item Użytkownik otwiera przeglądarkę i wchodzi na adres aplikacji (HTTPS)
+    \item NGINX (reverse proxy) kieruje żądania ścieżek \texttt{/*} do kontenera Frontend
+    \item Frontend (SvelteKit) zwraca statyczne pliki HTML, CSS i JavaScript do przeglądarki
+    \item Kod JavaScript wykonywany w przeglądarce wysyła żądania API (\texttt{/api/*}) przez NGINX
+    \item NGINX przekazuje żądania \texttt{/api/*} do kontenera Backend (FastAPI)
+    \item Backend komunikuje się z PostgreSQL (metadane, użytkownicy) oraz MinIO (pliki)
 \end{enumerate}
+
+\textbf{Uwaga:} Frontend i Backend nie komunikują się bezpośrednio między sobą. Cała komunikacja z API odbywa się z poziomu przeglądarki użytkownika przez NGINX.
 
 \subsection{Warstwa frontendowa}
 
@@ -193,7 +209,7 @@ Frontend został zbudowany z wykorzystaniem SvelteKit 2.x (Svelte 5), Node.js 22
 \begin{itemize}
     \item SvelteKit jako framework do budowy aplikacji
     \item TypeScript dla bezpieczeństwa typów
-    \item komunikacja z API po HTTP (adres API przekazywany przez zmienną \texttt{PUBLIC\_API\_URL})
+    \item komunikacja z API po HTTPS przez NGINX (żądania \texttt{/api/*})
 \end{itemize}
 
 Komponenty frontendowe:
@@ -228,7 +244,7 @@ Główne endpointy API:
 
 \subsection{Baza danych}
 
-System wykorzystuje PostgreSQL 18 jako relacyjną bazę danych. Schemat bazy obejmuje następujące tabele:
+System wykorzystuje PostgreSQL 17 jako relacyjną bazę danych. Schemat bazy obejmuje następujące tabele:
 \begin{itemize}
     \item \texttt{users} - dane użytkowników (w tym status TOTP oraz limity storage)
     \item \texttt{files} - metadane plików (aktualna wersja, rozmiar, ulubione)
@@ -386,6 +402,7 @@ Mechanizm wersjonowania działa następująco:
 files (
   id UUID PK,
   name TEXT,
+  path TEXT,
   owner TEXT FK -> users.username,
   current_version INT,
   size INT,

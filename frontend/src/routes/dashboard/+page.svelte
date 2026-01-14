@@ -36,6 +36,58 @@
     let uploadTotalFiles = $state(0);
     let uploadError = $state('');
 
+    const uploadErrorTranslations: Record<string, string> = {
+        'Uploading this file would exceed your storage quota.': 'Przesłanie tego pliku przekroczyłoby limit miejsca.',
+        'File with the same name already exists in the database.': 'Plik o tej nazwie już istnieje.',
+        'Invalid UUID format': 'Nieprawidłowy identyfikator pliku.',
+        'User not found': 'Nie znaleziono użytkownika.',
+        "File not found or you don't have permission to access it": 'Nie znaleziono pliku lub brak uprawnień.',
+        "File not found or you don't have permission to delete it": 'Nie znaleziono pliku lub brak uprawnień do usunięcia.',
+        "File not found or you don't have permission to modify it": 'Nie znaleziono pliku lub brak uprawnień do modyfikacji.',
+        'Cannot delete current version. Restore another version first.': 'Nie można usunąć aktualnej wersji. Najpierw przywróć inną.'
+    };
+
+    function getErrorDetail(xhr: XMLHttpRequest): string | null {
+        if (!xhr.responseText) {
+            return null;
+        }
+
+        try {
+            const parsed = JSON.parse(xhr.responseText);
+            if (typeof parsed?.detail === 'string') {
+                return parsed.detail;
+            }
+        } catch {
+            return null;
+        }
+
+        return null;
+    }
+
+    function localizeUploadError(detail: string | null, status: number): string {
+        if (detail && uploadErrorTranslations[detail]) {
+            return uploadErrorTranslations[detail];
+        }
+
+        if (status === 413) {
+            return 'Przekroczono limit miejsca na dysku.';
+        }
+
+        if (status === 409) {
+            return 'Plik o tej nazwie już istnieje.';
+        }
+
+        if (status === 400) {
+            return 'Nieprawidłowe dane przesyłanego pliku.';
+        }
+
+        if (status >= 500) {
+            return 'Błąd serwera. Spróbuj ponownie później.';
+        }
+
+        return 'Nie udało się przesłać pliku.';
+    }
+
     // Download progress state
     let downloadProgress = $state(0);
     let downloadFileName = $state('');
@@ -440,24 +492,12 @@
                         window.localStorage.removeItem('access_token');
                         window.location.href = '/login';
                         reject(new Error('Unauthorized'));
-                    } else if (xhr.status === 413) {
-                        // Plik zbyt duży lub przekroczony limit storage
-                        let errorMessage = 'Plik jest zbyt duży lub przekroczono limit miejsca';
-                        try {
-                            const response = JSON.parse(xhr.responseText);
-                            if (response.detail) {
-                                errorMessage = response.detail;
-                            }
-                        } catch (e) {
-                            // Użyj domyślnej wiadomości
-                        }
-                        uploadError = `${file.name}: ${errorMessage}`;
-                        console.error('Błąd 413:', errorMessage);
-                        reject(new Error(errorMessage));
                     } else {
-                        console.error('Błąd podczas przesyłania pliku:', xhr.statusText);
-                        uploadError = `${file.name}: ${xhr.statusText || 'Błąd przesyłania'}`;
-                        reject(new Error(xhr.statusText));
+                        const detail = getErrorDetail(xhr);
+                        const localized = localizeUploadError(detail, xhr.status);
+                        console.error('Błąd podczas przesyłania pliku:', detail || xhr.statusText);
+                        uploadError = `${file.name}: ${localized}`;
+                        reject(new Error(localized));
                     }
                 };
 
@@ -876,10 +916,20 @@
     .upload-button {
         display: flex;
         flex-direction: row;
+        align-items: center;
+        justify-content: center;
+        gap: 12px;
+        width: 100%;
+        text-align: center;
+        cursor: pointer;
+        padding: 12px 16px;
     }
 
     .upload-label-text {
-        padding-left: 1rem;
+        padding-left: 0;
+        display: flex;
+        align-items: center;
+        line-height: 1;
     }
 
     .feather {
@@ -898,6 +948,7 @@
 
     .upload {
         cursor: pointer;
+        justify-content: center;
     }
 
     .feather.file {
@@ -922,8 +973,9 @@
         width: 100%;
         display: flex;
         align-items: center;
+        justify-content: center;
         gap: 16px;
-        padding: 12px 16px;
+        padding: 0;
         border-radius: 8px;
         text-decoration: none;
         color: var(--text-secondary);

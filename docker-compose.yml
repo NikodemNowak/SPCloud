@@ -65,7 +65,7 @@ services:
       - spcloud_network
 
   db:
-    image: postgres:18
+    image: postgres:17
     container_name: postgres
     restart: always
     env_file: .env
