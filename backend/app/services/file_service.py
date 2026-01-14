@@ -1,11 +1,17 @@
+import asyncio
 import zipfile
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from io import BytesIO
-from typing import List
+from typing import List, Tuple
 from uuid import uuid4
 import os
+import time
 
 from core.s3_client import s3, ensure_bucket_exists
+
+# Globalny executor dla operacji S3 z większą liczbą wątków
+_s3_executor = ThreadPoolExecutor(max_workers=10)
 from fastapi import UploadFile, HTTPException, status
 from models.models import User, FileStorage, FileVersion
 from schemas.file import FileItem, FileSetIsFavorite
@@ -404,8 +410,16 @@ class FileService:
                     }
                 )
 
-                # Zwróć bazową nazwę pliku (bez _vN)
-                return file_obj, file_record.name
+                # Zwróć generator chunków dla lepszego streamingu
+                def iter_file():
+                    chunk_size = 1024 * 1024  # 1 MB chunks
+                    while True:
+                        chunk = file_obj.read(chunk_size)
+                        if not chunk:
+                            break
+                        yield chunk
+
+                return iter_file(), file_record.name, current_version.size
             except Exception as e:
                 raise HTTPException(
                     status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -424,45 +438,83 @@ class FileService:
             )
             raise
 
+    def _download_file_from_s3_sync(self, bucket_name: str, s3_filename: str) -> bytes:
+        """
+        Synchroniczna funkcja do pobierania pliku z S3 (do użycia w thread pool)
+        """
+        file_obj = BytesIO()
+        s3.download_fileobj(bucket_name, s3_filename, file_obj)
+        file_obj.seek(0)
+        return file_obj.read()
+
     async def get_many_files(self, file_ids: List[str], username: str, ip_address: str = None):
         try:
-            zip_buffer = BytesIO()
+            # Najpierw pobierz metadane wszystkich plików
+            files_to_download: List[Tuple[str, str, str]] = []  # (name, bucket, s3_filename)
             size = 0.0
-            with zipfile.ZipFile(zip_buffer, "w") as zip_file:
-                for file_id in file_ids:
-                    file_uuid = _str_to_uuid(file_id)
-
-                    result = await self.db.execute(
-                        select(FileStorage).where(
-                            FileStorage.id == file_uuid,
-                            FileStorage.owner == username
-                        )
+            
+            for file_id in file_ids:
+                file_uuid = _str_to_uuid(file_id)
+                result = await self.db.execute(
+                    select(FileStorage).where(
+                        FileStorage.id == file_uuid,
+                        FileStorage.owner == username
                     )
-                    file_record = result.scalar_one_or_none()
+                )
+                file_record = result.scalar_one_or_none()
+                if not file_record:
+                    continue
+                    
+                size += file_record.size
+                bucket_name = f"user-{username}"
+                versioned_filename = self._build_versioned_filename(
+                    file_record.name, file_record.current_version
+                )
+                files_to_download.append((file_record.name, bucket_name, versioned_filename))
 
-                    if not file_record:
-                        continue
+            # Pobierz wszystkie pliki równolegle używając thread pool
+            loop = asyncio.get_event_loop()
+            
+            async def download_file_async(name: str, bucket: str, s3_filename: str) -> Tuple[str, bytes]:
+                """Pobiera plik z S3 asynchronicznie używając thread pool"""
+                try:
+                    content = await loop.run_in_executor(
+                        _s3_executor,  # Dedykowany executor z 10 wątkami
+                        self._download_file_from_s3_sync,
+                        bucket,
+                        s3_filename
+                    )
+                    return (name, content)
+                except Exception as e:
+                    raise HTTPException(
+                        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                        detail=f"Failed to download file '{name}' from S3: {str(e)}"
+                    )
 
-                    size += file_record.size
+            # Pobierz wszystkie pliki równolegle
+            start_download = time.time()
+            download_tasks = [
+                download_file_async(name, bucket, s3_filename)
+                for name, bucket, s3_filename in files_to_download
+            ]
+            downloaded_files = await asyncio.gather(*download_tasks)
+            download_time = time.time() - start_download
+            print(f"[PERF] Download from S3: {download_time:.2f}s for {len(files_to_download)} files")
 
-                    bucket_name = f"user-{username}"
-                    current_version_number = file_record.current_version
-
-                    versioned_filename = self._build_versioned_filename(file_record.name, current_version_number)
-
-                    try:
-                        file_obj = BytesIO()
-                        s3.download_fileobj(bucket_name, versioned_filename, file_obj)
-                        file_obj.seek(0)
-                        zip_file.writestr(file_record.name, file_obj.read())
-                    except Exception as e:
-                        raise HTTPException(
-                            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                            detail=f"Failed to download file '{file_record.name}' from S3: {str(e)}"
-                        )
+            # Utwórz ZIP z pobranych plików (bez kompresji - szybciej)
+            start_zip = time.time()
+            zip_buffer = BytesIO()
+            with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_STORED) as zip_file:
+                for name, content in downloaded_files:
+                    zip_file.writestr(name, content)
+            zip_time = time.time() - start_zip
+            print(f"[PERF] ZIP creation: {zip_time:.2f}s")
 
             zip_buffer.seek(0)
+            zip_size = zip_buffer.getbuffer().nbytes
             zip_filename = "files_bundle.zip"
+            
+            print(f"[PERF] Total time before response: {time.time() - start_download:.2f}s, ZIP size: {zip_size / (1024*1024):.2f} MB")
 
             await self.log_service.log_action(
                 action=LogAction.FILE_MANY_DOWNLOAD,
@@ -472,11 +524,23 @@ class FileService:
                 details={
                     "ip_address": ip_address,
                     "total_size_bytes": size,
-                    "files_count": len(file_ids)
+                    "zip_size_bytes": zip_size,
+                    "files_count": len(file_ids),
+                    "download_time_s": download_time,
+                    "zip_time_s": zip_time
                 }
             )
 
-            return zip_buffer, zip_filename
+            # Zwróć generator chunków dla lepszego streamingu
+            def iter_file():
+                chunk_size = 1024 * 1024  # 1 MB chunks
+                while True:
+                    chunk = zip_buffer.read(chunk_size)
+                    if not chunk:
+                        break
+                    yield chunk
+
+            return iter_file(), zip_filename, zip_size
         except Exception as e:
             await self.log_service.log_action(
                 action=LogAction.FILE_MANY_DOWNLOAD,

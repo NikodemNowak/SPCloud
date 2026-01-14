@@ -83,19 +83,22 @@ async def download_file(
     - **file_id**: UUID of the file to download
     """
     ip_address = request.client.host if request.client else None
-    file_obj, filename = await FileService(db).download_file(file_id=file_id, username=user.username,
+    file_obj, filename, file_size = await FileService(db).download_file(file_id=file_id, username=user.username,
                                                              ip_address=ip_address)
 
     try:
         return StreamingResponse(
             file_obj,
             media_type="application/octet-stream",
-            headers={"Content-Disposition": f"attachment; filename*=UTF-8''{filename}"}
+            headers={
+                "Content-Disposition": f"attachment; filename*=UTF-8''{filename}",
+                "Content-Length": str(file_size)
+            }
         )
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error uploading file: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error downloading file: {str(e)}")
 
 
 @router.post("/download", status_code=status.HTTP_200_OK)
@@ -110,19 +113,22 @@ async def download_many_files(
     - **files**: Object containing a list of file IDs to download
     """
     ip_address = request.client.host if request.client else None
-    zip_obj, zip_filename = await FileService(db).get_many_files(file_ids=files.file_ids, username=user.username,
+    zip_obj, zip_filename, zip_size = await FileService(db).get_many_files(file_ids=files.file_ids, username=user.username,
                                                                  ip_address=ip_address)
 
     try:
         return StreamingResponse(
             zip_obj,
             media_type="application/zip",
-            headers={"Content-Disposition": f"attachment; filename*=UTF-8''{zip_filename}"}
+            headers={
+                "Content-Disposition": f"attachment; filename*=UTF-8''{zip_filename}",
+                "Content-Length": str(zip_size)
+            }
         )
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error uploading file: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error downloading files: {str(e)}")
 
 
 @router.delete("/{file_id}", status_code=status.HTTP_200_OK)

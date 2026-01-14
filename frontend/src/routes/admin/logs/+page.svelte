@@ -285,6 +285,7 @@
     }
 
     .logout-button {
+        all: unset;
         display: flex;
         align-items: center;
         justify-content: center;
@@ -295,6 +296,7 @@
         padding: 8px;
         border-radius: 50%;
         transition: all 0.2s ease;
+        box-sizing: border-box;
     }
 
     .logout-button svg {

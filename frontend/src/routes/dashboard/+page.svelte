@@ -26,8 +26,19 @@
     let result = $state<FileDesc[]>([]);
     let files = $state<FileDesc[]>([]);
     let isDownloading = $state(false);
-    let downloadingText = $state('');
     let isAdmin = $state(false);
+
+    // Upload progress state
+    let isUploading = $state(false);
+    let uploadProgress = $state(0);
+    let uploadFileName = $state('');
+    let uploadCurrentFile = $state(0);
+    let uploadTotalFiles = $state(0);
+    let uploadError = $state('');
+
+    // Download progress state
+    let downloadProgress = $state(0);
+    let downloadFileName = $state('');
 
     const MAX_STORAGE_MB = 100;
     const usedStorageMB = $derived(
@@ -202,85 +213,94 @@
         }
 
         isDownloading = true;
-        downloadingText = '';
+        downloadProgress = 0;
 
-        const dotsInterval = setInterval(() => {
-            downloadingText = downloadingText.length >= 3 ? '' : downloadingText + '.';
-        }, 500);
+        function downloadWithProgress(url: string, method: string, body: string | null, fileName: string): Promise<void> {
+            return new Promise((resolve, reject) => {
+                const xhr = new XMLHttpRequest();
+                xhr.open(method, url, true);
+                xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+                if (body) {
+                    xhr.setRequestHeader('Content-Type', 'application/json');
+                }
+                xhr.responseType = 'blob';
+
+                xhr.onprogress = (event) => {
+                    if (event.lengthComputable) {
+                        downloadProgress = Math.round((event.loaded / event.total) * 100);
+                        console.log(`Download progress: ${downloadProgress}%`);
+                    } else if (event.loaded) {
+                        // If total is unknown, show bytes downloaded
+                        console.log(`Downloaded: ${event.loaded} bytes`);
+                    }
+                };
+
+                xhr.onload = () => {
+                    if (xhr.status >= 200 && xhr.status < 300) {
+                        const blob = xhr.response;
+                        if (blob) {
+                            const downloadUrl = window.URL.createObjectURL(blob);
+                            const a = document.createElement('a');
+                            a.href = downloadUrl;
+                            a.download = fileName;
+                            document.body.appendChild(a);
+                            a.click();
+                            window.URL.revokeObjectURL(downloadUrl);
+                            document.body.removeChild(a);
+                            console.log('Plik pobrany pomyślnie');
+                        }
+                        resolve();
+                    } else if (xhr.status === 401 || xhr.status === 403) {
+                        console.error('Token nieprawidłowy - przekierowanie na /login');
+                        window.localStorage.removeItem('access_token');
+                        window.location.href = '/login';
+                        reject(new Error('Unauthorized'));
+                    } else {
+                        reject(new Error(`Download failed: ${xhr.statusText}`));
+                    }
+                };
+
+                xhr.onerror = () => {
+                    console.error('Błąd sieci podczas pobierania pliku');
+                    reject(new Error('Network error'));
+                };
+
+                xhr.send(body);
+            });
+        }
 
         try {
             if (selectedFileIds.length === 1) {
                 const fileId = selectedFileIds[0];
                 const file = files.find((f) => f.id === fileId);
+                downloadFileName = file?.name || 'plik';
 
-                const response = await fetch(`https://localhost/api/v1/files/download/${fileId}`, {
-                    method: 'GET',
-                    headers: {
-                        'Authorization': `Bearer ${token}`,
-                    },
-                });
-
-                if (response.status === 401 || response.status === 403) {
-                    console.error('Token nieprawidłowy - przekierowanie na /login');
-                    window.localStorage.removeItem('access_token');
-                    window.location.href = '/login';
-                    clearInterval(dotsInterval);
-                    isDownloading = false;
-                    return;
-                }
-
-                if (!response.ok) {
-                    throw new Error('Download failed');
-                }
-
-                const blob = await response.blob();
-                if (blob) {
-                    const url = window.URL.createObjectURL(blob);
-                    const a = document.createElement('a');
-                    a.href = url;
-                    a.download = file?.name || 'plik';
-                    document.body.appendChild(a);
-                    a.click();
-                    window.URL.revokeObjectURL(url);
-                    document.body.removeChild(a);
-                    console.log('Plik pobrany pomyślnie');
-                }
+                await downloadWithProgress(
+                    `https://localhost/api/v1/files/download/${fileId}`,
+                    'GET',
+                    null,
+                    downloadFileName
+                );
             } else {
-                let fileIds = selectedFileIds.map(value => value);
-                console.log(JSON.stringify(fileIds));
-                let result = await fetch('https://localhost/api/v1/files/download', {
-                    method: 'POST',
-                    headers: {
-                        'Authorization': `Bearer ${localStorage.getItem('access_token')}`,
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({
-                        file_ids: fileIds
-                    })
-                });
+                downloadFileName = 'download.zip';
+                const fileIds = selectedFileIds.map(value => value);
 
-                let blob = await result.blob();
-
-                if (blob) {
-                    const url = window.URL.createObjectURL(blob);
-                    const a = document.createElement('a');
-                    a.href = url;
-                    a.download = 'download.zip';
-                    document.body.appendChild(a);
-                    a.click();
-                    window.URL.revokeObjectURL(url);
-                    document.body.removeChild(a);
-                    console.log('Plik pobrany pomyślnie');
-                }
+                await downloadWithProgress(
+                    'https://localhost/api/v1/files/download',
+                    'POST',
+                    JSON.stringify({ file_ids: fileIds }),
+                    downloadFileName
+                );
             }
         } catch (error) {
             console.error('Błąd podczas pobierania pliku:', error);
         } finally {
-            clearInterval(dotsInterval);
-            downloadingText = ' zakończone';
             selectedFileIds = [];
+            downloadProgress = 100;
             setTimeout(() => {
                 isDownloading = false;
+                downloadProgress = 0;
+                downloadFileName = '';
             }, 1000);
         }
     }
@@ -374,9 +394,9 @@
 
     function handleFileUpload(event: Event) {
         const input = event.target as HTMLInputElement;
-        const files = input.files;
+        const uploadFiles = input.files;
 
-        if (!files || files.length === 0) {
+        if (!uploadFiles || uploadFiles.length === 0) {
             console.error('Nie wybrano plików');
             return;
         }
@@ -389,32 +409,100 @@
             return;
         }
 
-        const fileArray = Array.from(files);
+        const fileArray = Array.from(uploadFiles);
+        uploadTotalFiles = fileArray.length;
+        uploadCurrentFile = 0;
+        isUploading = true;
+        uploadProgress = 0;
 
-        async function uploadFilesSequentially() {
-            for (const file of fileArray) {
+        function uploadFileWithProgress(file: File): Promise<void> {
+            return new Promise((resolve, reject) => {
                 const formData = new FormData();
                 formData.append('file', file);
 
-                await fetch("https://localhost/api/v1/files/upload", {
-                    method: 'POST',
-                    headers: {
-                        'Authorization': `Bearer ${token}`,
-                    },
-                    body: formData,
-                }).then((response) => {
-                    if (!response.ok) {
-                        throw new Error('Upload failed');
+                const xhr = new XMLHttpRequest();
+                xhr.open('POST', 'https://localhost/api/v1/files/upload', true);
+                xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+
+                xhr.upload.onprogress = (event) => {
+                    if (event.lengthComputable) {
+                        uploadProgress = Math.round((event.loaded / event.total) * 100);
+                        console.log(`Upload progress for ${file.name}: ${uploadProgress}%`);
                     }
-                    return response.json();
-                }).then((data) => {
-                    console.log('Plik przesłany pomyślnie:', data);
-                }).catch((error) => {
+                };
+
+                xhr.onload = () => {
+                    if (xhr.status >= 200 && xhr.status < 300) {
+                        console.log('Plik przesłany pomyślnie:', file.name);
+                        resolve();
+                    } else if (xhr.status === 401 || xhr.status === 403) {
+                        console.error('Token nieprawidłowy - przekierowanie na /login');
+                        window.localStorage.removeItem('access_token');
+                        window.location.href = '/login';
+                        reject(new Error('Unauthorized'));
+                    } else if (xhr.status === 413) {
+                        // Plik zbyt duży lub przekroczony limit storage
+                        let errorMessage = 'Plik jest zbyt duży lub przekroczono limit miejsca';
+                        try {
+                            const response = JSON.parse(xhr.responseText);
+                            if (response.detail) {
+                                errorMessage = response.detail;
+                            }
+                        } catch (e) {
+                            // Użyj domyślnej wiadomości
+                        }
+                        uploadError = `${file.name}: ${errorMessage}`;
+                        console.error('Błąd 413:', errorMessage);
+                        reject(new Error(errorMessage));
+                    } else {
+                        console.error('Błąd podczas przesyłania pliku:', xhr.statusText);
+                        uploadError = `${file.name}: ${xhr.statusText || 'Błąd przesyłania'}`;
+                        reject(new Error(xhr.statusText));
+                    }
+                };
+
+                xhr.onerror = () => {
+                    console.error('Błąd sieci podczas przesyłania pliku');
+                    reject(new Error('Network error'));
+                };
+
+                xhr.send(formData);
+            });
+        }
+
+        async function uploadFilesSequentially() {
+            uploadError = ''; // Reset błędu na początku
+            
+            for (const file of fileArray) {
+                uploadCurrentFile++;
+                uploadFileName = file.name;
+                uploadProgress = 0;
+
+                try {
+                    await uploadFileWithProgress(file);
+                } catch (error) {
                     console.error('Błąd podczas przesyłania pliku:', error);
-                });
+                    // Błąd jest już ustawiony w uploadError, kontynuuj z pozostałymi plikami
+                }
             }
 
             input.value = '';
+            
+            // Jeśli był błąd, pokaż go przez chwilę przed zamknięciem
+            if (uploadError) {
+                uploadProgress = 0;
+                uploadFileName = '';
+                // Poczekaj 4 sekundy przed ukryciem, żeby użytkownik zobaczył błąd
+                setTimeout(() => {
+                    isUploading = false;
+                    uploadError = '';
+                }, 4000);
+            } else {
+                isUploading = false;
+                uploadProgress = 0;
+                uploadFileName = '';
+            }
+            
             fetchFiles();
         }
 
@@ -705,7 +793,12 @@
                             <use href="{feather}#download"/>
                         </svg>
                         {#if isDownloading}
-                            Pobieranie{downloadingText}
+                            <span class="download-text">
+                                Pobieranie {downloadFileName} ({downloadProgress}%)
+                            </span>
+                            <div class="progress-bar-container">
+                                <div class="progress-bar" style="width: {downloadProgress}%"></div>
+                            </div>
                         {:else if selectedFileIds.length === 1}
                             Pobierz
                         {:else}
@@ -739,6 +832,33 @@
                             </button>
                         </div>
                     {/if}
+                </div>
+            {/if}
+
+            {#if isUploading}
+                <div class="upload-progress-bar" class:upload-error={uploadError}>
+                    <div class="upload-progress-content">
+                        <svg class="feather">
+                            {#if uploadError}
+                                <use href="{feather}#alert-circle"/>
+                            {:else}
+                                <use href="{feather}#upload-cloud"/>
+                            {/if}
+                        </svg>
+                        <div class="upload-progress-info">
+                            {#if uploadError}
+                                <span class="upload-error-text">{uploadError}</span>
+                            {:else}
+                                <span class="upload-progress-text">
+                                    Przesyłanie ({uploadCurrentFile}/{uploadTotalFiles}): {uploadFileName}
+                                </span>
+                                <div class="progress-bar-container">
+                                    <div class="progress-bar" style="width: {uploadProgress}%"></div>
+                                </div>
+                                <span class="upload-progress-percent">{uploadProgress}%</span>
+                            {/if}
+                        </div>
+                    </div>
                 </div>
             {/if}
         </div>
@@ -1542,6 +1662,120 @@
         .file-date,
         .file-size {
             display: block;
+        }
+    }
+
+    /* Progress bar styles */
+    .progress-bar-container {
+        width: 100%;
+        height: 4px;
+        background-color: rgba(255, 255, 255, 0.2);
+        border-radius: 2px;
+        overflow: hidden;
+        margin-top: 4px;
+    }
+
+    .progress-bar {
+        height: 100%;
+        background-color: #fff;
+        border-radius: 2px;
+        transition: width 0.15s ease-out;
+    }
+
+    .download-text {
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        max-width: 200px;
+    }
+
+    .download-button .progress-bar-container {
+        width: 100px;
+        margin-left: 8px;
+        margin-top: 0;
+    }
+
+    /* Upload progress bar */
+    .upload-progress-bar {
+        position: absolute;
+        top: 80px;
+        left: 50%;
+        transform: translateX(-50%);
+        background-color: var(--primary-purple);
+        border-radius: 12px;
+        padding: 16px 24px;
+        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+        z-index: 100;
+        animation: slide-down 0.3s ease-out forwards;
+        min-width: 300px;
+        max-width: 500px;
+    }
+
+    .upload-progress-content {
+        display: flex;
+        align-items: center;
+        gap: 16px;
+    }
+
+    .upload-progress-content .feather {
+        width: 32px;
+        height: 32px;
+        stroke: #fff;
+        flex-shrink: 0;
+    }
+
+    .upload-progress-info {
+        flex-grow: 1;
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+    }
+
+    .upload-progress-text {
+        font-size: 0.875rem;
+        color: #fff;
+        font-weight: 500;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        max-width: 350px;
+    }
+
+    .upload-progress-percent {
+        font-size: 0.75rem;
+        color: rgba(255, 255, 255, 0.8);
+        font-weight: 600;
+    }
+
+    .upload-progress-bar .progress-bar-container {
+        height: 6px;
+        background-color: rgba(255, 255, 255, 0.3);
+    }
+
+    .upload-progress-bar .progress-bar {
+        background: linear-gradient(90deg, #fff, rgba(255, 255, 255, 0.9));
+    }
+
+    /* Upload error styles */
+    .upload-progress-bar.upload-error {
+        background-color: #dc2626;
+    }
+
+    .upload-error-text {
+        font-size: 0.875rem;
+        color: #fff;
+        font-weight: 500;
+        word-break: break-word;
+    }
+
+    @keyframes slide-down {
+        from {
+            opacity: 0;
+            transform: translate(-50%, -20px);
+        }
+        to {
+            opacity: 1;
+            transform: translate(-50%, 0);
         }
     }
 </style>
