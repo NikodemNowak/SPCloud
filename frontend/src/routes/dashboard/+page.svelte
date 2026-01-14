@@ -13,6 +13,14 @@
         size: number;
     };
 
+    type FileVersion = {
+        version_number: number;
+        size: number;
+        created_at: string;
+        created_by: string;
+        is_current: boolean;
+    };
+
     let activeNavLink = $state('my-files');
     let search = $state('');
     let isSortMenuOpen = $state(false);
@@ -26,12 +34,103 @@
     let result = $state<FileDesc[]>([]);
     let files = $state<FileDesc[]>([]);
     let isDownloading = $state(false);
-    let downloadingText = $state('');
+    let isAdmin = $state(false);
 
-    const MAX_STORAGE_MB = 100;
-    const usedStorageMB = $derived(
-        files.reduce((sum, file) => sum + (file.size / (1024 * 1024)), 0)
-    );
+    // Upload progress state
+    let isUploading = $state(false);
+    let uploadProgress = $state(0);
+    let uploadFileName = $state('');
+    let uploadCurrentFile = $state(0);
+    let uploadTotalFiles = $state(0);
+    let uploadError = $state('');
+
+    let isVersionsOpen = $state(false);
+    let versionsLoading = $state(false);
+    let versionsError = $state('');
+    let selectedFileForVersions = $state<FileDesc | null>(null);
+    let fileVersions = $state<FileVersion[]>([]);
+
+    const apiErrorTranslations: Record<string, string> = {
+        'Uploading this file would exceed your storage quota.': 'Przesłanie tego pliku przekroczyłoby limit miejsca.',
+        'File with the same name already exists in the database.': 'Plik o tej nazwie już istnieje.',
+        'Invalid UUID format': 'Nieprawidłowy identyfikator pliku.',
+        'User not found': 'Nie znaleziono użytkownika.',
+        "File not found or you don't have permission to access it": 'Nie znaleziono pliku lub brak uprawnień.',
+        "File not found or you don't have permission to delete it": 'Nie znaleziono pliku lub brak uprawnień do usunięcia.',
+        "File not found or you don't have permission to modify it": 'Nie znaleziono pliku lub brak uprawnień do modyfikacji.',
+        'Cannot delete current version. Restore another version first.': 'Nie można usunąć aktualnej wersji. Najpierw przywróć inną.'
+    };
+
+    function getErrorDetail(source: XMLHttpRequest | string | null): string | null {
+        if (!source) {
+            return null;
+        }
+
+        const responseText = typeof source === 'string' ? source : source.responseText;
+        if (!responseText) {
+            return null;
+        }
+
+        try {
+            const parsed = JSON.parse(responseText);
+            if (typeof parsed?.detail === 'string') {
+                return parsed.detail;
+            }
+        } catch {
+            return null;
+        }
+
+        return null;
+    }
+
+    function localizeApiError(detail: string | null, status: number): string {
+        if (detail && apiErrorTranslations[detail]) {
+            return apiErrorTranslations[detail];
+        }
+
+        if (detail && /Version\s+\d+\s+not\s+found/i.test(detail)) {
+            return 'Nie znaleziono wskazanej wersji pliku.';
+        }
+
+        if (status === 413) {
+            return 'Przekroczono limit miejsca na dysku.';
+        }
+
+        if (status === 409) {
+            return 'Plik o tej nazwie już istnieje.';
+        }
+
+        if (status === 400) {
+            return 'Nieprawidłowe dane przesyłanego pliku.';
+        }
+
+        if (status >= 500) {
+            return 'Błąd serwera. Spróbuj ponownie później.';
+        }
+
+        return 'Nie udało się przesłać pliku.';
+    }
+
+    function buildVersionedFilename(name: string, version: number): string {
+        const lastDot = name.lastIndexOf('.');
+        if (lastDot === -1) {
+            return `${name}_v${version}`;
+        }
+        const base = name.slice(0, lastDot);
+        const ext = name.slice(lastDot);
+        return `${base}_v${version}${ext}`;
+    }
+
+    // Download progress state
+    let downloadProgress = $state(0);
+    let downloadFileName = $state('');
+
+    let isVersionDownloading = $state(false);
+    let versionDownloadProgress = $state(0);
+    let versionDownloadLabel = $state('');
+
+    let usedStorageMB = $state(0);
+    let maxStorageMB = $state(100);
 
     const searcher = $derived(new FuzzySearch(Array.from(files), ['name'], {
         caseSensitive: false
@@ -58,6 +157,25 @@
         } else {
             localStorage.clear();
             window.location.href = '/login';
+        }
+    }
+
+    async function checkAdminStatus() {
+        const token = window.localStorage.getItem('access_token');
+        if (!token) return;
+
+        try {
+            const response = await fetch('https://localhost/api/v1/users/isadmin', {
+                method: 'GET',
+                headers: {
+                    'Authorization': `Bearer ${token}`
+                }
+            });
+            if (response.ok) {
+                isAdmin = await response.json();
+            }
+        } catch (error) {
+            console.error('Error checking admin status:', error);
         }
     }
 
@@ -182,85 +300,94 @@
         }
 
         isDownloading = true;
-        downloadingText = '';
+        downloadProgress = 0;
 
-        const dotsInterval = setInterval(() => {
-            downloadingText = downloadingText.length >= 3 ? '' : downloadingText + '.';
-        }, 500);
+        function downloadWithProgress(url: string, method: string, body: string | null, fileName: string): Promise<void> {
+            return new Promise((resolve, reject) => {
+                const xhr = new XMLHttpRequest();
+                xhr.open(method, url, true);
+                xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+                if (body) {
+                    xhr.setRequestHeader('Content-Type', 'application/json');
+                }
+                xhr.responseType = 'blob';
+
+                xhr.onprogress = (event) => {
+                    if (event.lengthComputable) {
+                        downloadProgress = Math.round((event.loaded / event.total) * 100);
+                        console.log(`Download progress: ${downloadProgress}%`);
+                    } else if (event.loaded) {
+                        // If total is unknown, show bytes downloaded
+                        console.log(`Downloaded: ${event.loaded} bytes`);
+                    }
+                };
+
+                xhr.onload = () => {
+                    if (xhr.status >= 200 && xhr.status < 300) {
+                        const blob = xhr.response;
+                        if (blob) {
+                            const downloadUrl = window.URL.createObjectURL(blob);
+                            const a = document.createElement('a');
+                            a.href = downloadUrl;
+                            a.download = fileName;
+                            document.body.appendChild(a);
+                            a.click();
+                            window.URL.revokeObjectURL(downloadUrl);
+                            document.body.removeChild(a);
+                            console.log('Plik pobrany pomyślnie');
+                        }
+                        resolve();
+                    } else if (xhr.status === 401 || xhr.status === 403) {
+                        console.error('Token nieprawidłowy - przekierowanie na /login');
+                        window.localStorage.removeItem('access_token');
+                        window.location.href = '/login';
+                        reject(new Error('Unauthorized'));
+                    } else {
+                        reject(new Error(`Download failed: ${xhr.statusText}`));
+                    }
+                };
+
+                xhr.onerror = () => {
+                    console.error('Błąd sieci podczas pobierania pliku');
+                    reject(new Error('Network error'));
+                };
+
+                xhr.send(body);
+            });
+        }
 
         try {
             if (selectedFileIds.length === 1) {
                 const fileId = selectedFileIds[0];
                 const file = files.find((f) => f.id === fileId);
+                downloadFileName = file?.name || 'plik';
 
-                const response = await fetch(`https://localhost/api/v1/files/download/${fileId}`, {
-                    method: 'GET',
-                    headers: {
-                        'Authorization': `Bearer ${token}`,
-                    },
-                });
-
-                if (response.status === 401 || response.status === 403) {
-                    console.error('Token nieprawidłowy - przekierowanie na /login');
-                    window.localStorage.removeItem('access_token');
-                    window.location.href = '/login';
-                    clearInterval(dotsInterval);
-                    isDownloading = false;
-                    return;
-                }
-
-                if (!response.ok) {
-                    throw new Error('Download failed');
-                }
-
-                const blob = await response.blob();
-                if (blob) {
-                    const url = window.URL.createObjectURL(blob);
-                    const a = document.createElement('a');
-                    a.href = url;
-                    a.download = file?.name || 'plik';
-                    document.body.appendChild(a);
-                    a.click();
-                    window.URL.revokeObjectURL(url);
-                    document.body.removeChild(a);
-                    console.log('Plik pobrany pomyślnie');
-                }
+                await downloadWithProgress(
+                    `https://localhost/api/v1/files/download/${fileId}`,
+                    'GET',
+                    null,
+                    downloadFileName
+                );
             } else {
-                let fileIds = selectedFileIds.map(value => value);
-                console.log(JSON.stringify(fileIds));
-                let result = await fetch('https://localhost/api/v1/files/download', {
-                    method: 'POST',
-                    headers: {
-                        'Authorization': `Bearer ${localStorage.getItem('access_token')}`,
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({
-                        file_ids: fileIds
-                    })
-                });
+                downloadFileName = 'download.zip';
+                const fileIds = selectedFileIds.map(value => value);
 
-                let blob = await result.blob();
-
-                if (blob) {
-                    const url = window.URL.createObjectURL(blob);
-                    const a = document.createElement('a');
-                    a.href = url;
-                    a.download = 'download.zip';
-                    document.body.appendChild(a);
-                    a.click();
-                    window.URL.revokeObjectURL(url);
-                    document.body.removeChild(a);
-                    console.log('Plik pobrany pomyślnie');
-                }
+                await downloadWithProgress(
+                    'https://localhost/api/v1/files/download',
+                    'POST',
+                    JSON.stringify({ file_ids: fileIds }),
+                    downloadFileName
+                );
             }
         } catch (error) {
             console.error('Błąd podczas pobierania pliku:', error);
         } finally {
-            clearInterval(dotsInterval);
-            downloadingText = ' zakończone';
             selectedFileIds = [];
+            downloadProgress = 100;
             setTimeout(() => {
                 isDownloading = false;
+                downloadProgress = 0;
+                downloadFileName = '';
             }, 1000);
         }
     }
@@ -349,14 +476,42 @@
             }));
         }).catch((error) => {
             console.error('Błąd podczas pobierania plików:', error);
+        }).finally(() => {
+            fetchStorageInfo();
         });
+    }
+
+    async function fetchStorageInfo() {
+        const token = window.localStorage.getItem('access_token');
+        if (!token) {
+            return;
+        }
+
+        try {
+            const response = await fetch('https://localhost/api/v1/files/me', {
+                method: 'GET',
+                headers: {
+                    'Authorization': `Bearer ${token}`
+                }
+            });
+
+            if (!response.ok) {
+                return;
+            }
+
+            const data = await response.json();
+            usedStorageMB = data.used_storage_mb ?? usedStorageMB;
+            maxStorageMB = data.max_storage_mb ?? maxStorageMB;
+        } catch (error) {
+            console.error('Błąd podczas pobierania informacji o storage:', error);
+        }
     }
 
     function handleFileUpload(event: Event) {
         const input = event.target as HTMLInputElement;
-        const files = input.files;
+        const uploadFiles = input.files;
 
-        if (!files || files.length === 0) {
+        if (!uploadFiles || uploadFiles.length === 0) {
             console.error('Nie wybrano plików');
             return;
         }
@@ -369,32 +524,88 @@
             return;
         }
 
-        const fileArray = Array.from(files);
+        const fileArray = Array.from(uploadFiles);
+        uploadTotalFiles = fileArray.length;
+        uploadCurrentFile = 0;
+        isUploading = true;
+        uploadProgress = 0;
 
-        async function uploadFilesSequentially() {
-            for (const file of fileArray) {
+        function uploadFileWithProgress(file: File): Promise<void> {
+            return new Promise((resolve, reject) => {
                 const formData = new FormData();
                 formData.append('file', file);
 
-                await fetch("https://localhost/api/v1/files/upload", {
-                    method: 'POST',
-                    headers: {
-                        'Authorization': `Bearer ${token}`,
-                    },
-                    body: formData,
-                }).then((response) => {
-                    if (!response.ok) {
-                        throw new Error('Upload failed');
+                const xhr = new XMLHttpRequest();
+                xhr.open('POST', 'https://localhost/api/v1/files/upload', true);
+                xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+
+                xhr.upload.onprogress = (event) => {
+                    if (event.lengthComputable) {
+                        uploadProgress = Math.round((event.loaded / event.total) * 100);
+                        console.log(`Upload progress for ${file.name}: ${uploadProgress}%`);
                     }
-                    return response.json();
-                }).then((data) => {
-                    console.log('Plik przesłany pomyślnie:', data);
-                }).catch((error) => {
+                };
+
+                xhr.onload = () => {
+                    if (xhr.status >= 200 && xhr.status < 300) {
+                        console.log('Plik przesłany pomyślnie:', file.name);
+                        resolve();
+                    } else if (xhr.status === 401 || xhr.status === 403) {
+                        console.error('Token nieprawidłowy - przekierowanie na /login');
+                        window.localStorage.removeItem('access_token');
+                        window.location.href = '/login';
+                        reject(new Error('Unauthorized'));
+                    } else {
+                        const detail = getErrorDetail(xhr);
+                        const localized = localizeApiError(detail, xhr.status);
+                        console.error('Błąd podczas przesyłania pliku:', detail || xhr.statusText);
+                        uploadError = `${file.name}: ${localized}`;
+                        reject(new Error(localized));
+                    }
+                };
+
+                xhr.onerror = () => {
+                    console.error('Błąd sieci podczas przesyłania pliku');
+                    reject(new Error('Network error'));
+                };
+
+                xhr.send(formData);
+            });
+        }
+
+        async function uploadFilesSequentially() {
+            uploadError = ''; // Reset błędu na początku
+            
+            for (const file of fileArray) {
+                uploadCurrentFile++;
+                uploadFileName = file.name;
+                uploadProgress = 0;
+
+                try {
+                    await uploadFileWithProgress(file);
+                } catch (error) {
                     console.error('Błąd podczas przesyłania pliku:', error);
-                });
+                    // Błąd jest już ustawiony w uploadError, kontynuuj z pozostałymi plikami
+                }
             }
 
             input.value = '';
+            
+            // Jeśli był błąd, pokaż go przez chwilę przed zamknięciem
+            if (uploadError) {
+                uploadProgress = 0;
+                uploadFileName = '';
+                // Poczekaj 4 sekundy przed ukryciem, żeby użytkownik zobaczył błąd
+                setTimeout(() => {
+                    isUploading = false;
+                    uploadError = '';
+                }, 4000);
+            } else {
+                isUploading = false;
+                uploadProgress = 0;
+                uploadFileName = '';
+            }
+            
             fetchFiles();
         }
 
@@ -404,7 +615,162 @@
     onMount(() => {
         refresh_access_token();
         fetchFiles();
+        checkAdminStatus();
     });
+
+    async function openVersions(file: FileDesc) {
+        selectedFileForVersions = file;
+        isVersionsOpen = true;
+        versionsError = '';
+        versionsLoading = true;
+        fileVersions = [];
+
+        const token = window.localStorage.getItem('access_token');
+        if (!token) {
+            window.location.href = '/login';
+            return;
+        }
+
+        try {
+            const response = await fetch(`https://localhost/api/v1/files/${file.id}/versions`, {
+                method: 'GET',
+                headers: {
+                    'Authorization': `Bearer ${token}`
+                }
+            });
+
+            if (!response.ok) {
+                const detail = getErrorDetail(await response.text());
+                const localized = localizeApiError(detail, response.status);
+                versionsError = localized;
+                return;
+            }
+
+            const data = await response.json();
+            fileVersions = data.versions || [];
+        } catch (error) {
+            versionsError = 'Nie udało się pobrać wersji pliku.';
+        } finally {
+            versionsLoading = false;
+        }
+    }
+
+    function closeVersions() {
+        isVersionsOpen = false;
+        selectedFileForVersions = null;
+        versionsError = '';
+        fileVersions = [];
+    }
+
+    async function downloadVersion(file: FileDesc, version: number) {
+        const token = window.localStorage.getItem('access_token');
+        if (!token) {
+            window.location.href = '/login';
+            return;
+        }
+
+        versionsError = '';
+        isVersionDownloading = true;
+        versionDownloadProgress = 0;
+        versionDownloadLabel = `${file.name} (v${version})`;
+
+        return new Promise<void>((resolve, reject) => {
+            const xhr = new XMLHttpRequest();
+            xhr.open('GET', `https://localhost/api/v1/files/${file.id}/versions/${version}`, true);
+            xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+            xhr.responseType = 'blob';
+
+            xhr.onprogress = (event) => {
+                if (event.lengthComputable) {
+                    versionDownloadProgress = Math.round((event.loaded / event.total) * 100);
+                }
+            };
+
+            xhr.onload = () => {
+                isVersionDownloading = false;
+                if (xhr.status >= 200 && xhr.status < 300) {
+                    const blob = xhr.response;
+                    const downloadUrl = window.URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = downloadUrl;
+                    a.download = buildVersionedFilename(file.name, version);
+                    document.body.appendChild(a);
+                    a.click();
+                    window.URL.revokeObjectURL(downloadUrl);
+                    document.body.removeChild(a);
+                    resolve();
+                } else {
+                    const detail = getErrorDetail(xhr);
+                    versionsError = localizeApiError(detail, xhr.status);
+                    reject(new Error(versionsError));
+                }
+            };
+
+            xhr.onerror = () => {
+                isVersionDownloading = false;
+                versionsError = 'Błąd sieci podczas pobierania wersji.';
+                reject(new Error(versionsError));
+            };
+
+            xhr.send();
+        });
+    }
+
+    async function restoreVersion(file: FileDesc, version: number) {
+        const token = window.localStorage.getItem('access_token');
+        if (!token) {
+            window.location.href = '/login';
+            return;
+        }
+
+        try {
+            const response = await fetch(`https://localhost/api/v1/files/${file.id}/restore/${version}`, {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${token}`
+                }
+            });
+
+            if (!response.ok) {
+                const detail = getErrorDetail(await response.text());
+                versionsError = localizeApiError(detail, response.status);
+                return;
+            }
+
+            await fetchFiles();
+            await openVersions(file);
+        } catch (error) {
+            versionsError = 'Nie udało się przywrócić wersji.';
+        }
+    }
+
+    async function deleteVersion(file: FileDesc, version: number) {
+        const token = window.localStorage.getItem('access_token');
+        if (!token) {
+            window.location.href = '/login';
+            return;
+        }
+
+        try {
+            const response = await fetch(`https://localhost/api/v1/files/${file.id}/versions/${version}`, {
+                method: 'DELETE',
+                headers: {
+                    'Authorization': `Bearer ${token}`
+                }
+            });
+
+            if (!response.ok) {
+                const detail = getErrorDetail(await response.text());
+                versionsError = localizeApiError(detail, response.status);
+                return;
+            }
+
+            await fetchFiles();
+            await openVersions(file);
+        } catch (error) {
+            versionsError = 'Nie udało się usunąć wersji.';
+        }
+    }
 
     function formatBytes(bytes: number, decimals = 2) {
         if (bytes === 0) return '0 Bytes';
@@ -451,11 +817,23 @@
                             <span class="link-text">Najnowsze</span>
                         </button>
                     </li>
+                    {#if isAdmin}
+                        <li>
+                            <a href="/admin/logs" class="admin-link">
+                                <button>
+                                    <svg class="feather">
+                                        <use href="{feather}#shield"/>
+                                    </svg>
+                                    <span class="link-text">Panel Admina</span>
+                                </button>
+                            </a>
+                        </li>
+                    {/if}
                 </ul>
             </div>
             <div>
                 <StorageProgress usedStorage={usedStorageMB}
-                                 maxStorage={MAX_STORAGE_MB}/>
+                                 maxStorage={maxStorageMB}/>
                 <div class="upload">
 
                     <label for="upload" class="upload-button">
@@ -623,6 +1001,7 @@
                         <div class="header-columns">
                             <span class="header-date">Data modyfikacji</span>
                             <span class="header-size">Rozmiar</span>
+                            <span class="header-actions">Wersje</span>
                         </div>
                     </div>
                 </div>
@@ -659,10 +1038,95 @@
                                 minute: '2-digit'
                             })}</span>
                             <span class="file-size">{formatBytes(file.size)}</span>
+                            <button class="versions-btn" title="Wersje" onclick={() => openVersions(file)}>
+                                <svg class="feather">
+                                    <use href="{feather}#layers"/>
+                                </svg>
+                            </button>
                         </li>
                     {/each}
                 </ul>
             </main>
+
+            {#if isVersionsOpen && selectedFileForVersions}
+                <div class="versions-overlay" onclick={closeVersions}>
+                    <div class="versions-modal" onclick={(event) => event.stopPropagation()}>
+                        <div class="versions-header">
+                            <div>
+                                <h3>Wersje pliku</h3>
+                                <span class="versions-subtitle">{selectedFileForVersions.name}</span>
+                            </div>
+                            <button class="versions-close" onclick={closeVersions} aria-label="Zamknij">
+                                <svg class="feather">
+                                    <use href="{feather}#x"/>
+                                </svg>
+                            </button>
+                        </div>
+
+                        {#if versionsLoading}
+                            <div class="versions-state">Ładowanie wersji...</div>
+                        {:else if versionsError}
+                            <div class="versions-state versions-error">{versionsError}</div>
+                        {:else if fileVersions.length === 0}
+                            <div class="versions-state">Brak zapisanych wersji.</div>
+                        {:else}
+                            <ul class="versions-list">
+                                {#each fileVersions as version}
+                                    <li class="version-item" class:is-current={version.is_current}>
+                                        <div class="version-main">
+                                            <div class="version-badge">
+                                                v{version.version_number}
+                                                {#if version.is_current}
+                                                    <span class="version-current">Aktualna</span>
+                                                {/if}
+                                            </div>
+                                            <div class="version-meta">
+                                                <span>{new Date(version.created_at).toLocaleString('pl-PL')}</span>
+                                                <span>{formatBytes(version.size)}</span>
+                                                <span>Autor: {version.created_by}</span>
+                                            </div>
+                                        </div>
+                                        <div class="version-actions">
+                                            <button class="version-action" onclick={() => downloadVersion(selectedFileForVersions, version.version_number)}>
+                                                <svg class="feather">
+                                                    <use href="{feather}#download"/>
+                                                </svg>
+                                                Pobierz
+                                            </button>
+                                            <button class="version-action" disabled={version.is_current}
+                                                    onclick={() => restoreVersion(selectedFileForVersions, version.version_number)}>
+                                                <svg class="feather">
+                                                    <use href="{feather}#rotate-ccw"/>
+                                                </svg>
+                                                Przywróć
+                                            </button>
+                                            <button class="version-action danger" disabled={version.is_current}
+                                                    onclick={() => deleteVersion(selectedFileForVersions, version.version_number)}>
+                                                <svg class="feather">
+                                                    <use href="{feather}#trash-2"/>
+                                                </svg>
+                                                Usuń
+                                            </button>
+                                        </div>
+                                    </li>
+                                {/each}
+                            </ul>
+                        {/if}
+
+                        {#if isVersionDownloading}
+                            <div class="versions-progress">
+                                <div class="versions-progress-text">
+                                    Pobieranie: {versionDownloadLabel}
+                                </div>
+                                <div class="progress-bar-container">
+                                    <div class="progress-bar" style="width: {versionDownloadProgress}%"></div>
+                                </div>
+                                <div class="versions-progress-percent">{versionDownloadProgress}%</div>
+                            </div>
+                        {/if}
+                    </div>
+                </div>
+            {/if}
 
             {#if selectedFileIds.length > 0}
                 <div class="download-bar">
@@ -672,7 +1136,12 @@
                             <use href="{feather}#download"/>
                         </svg>
                         {#if isDownloading}
-                            Pobieranie{downloadingText}
+                            <span class="download-text">
+                                Pobieranie {downloadFileName} ({downloadProgress}%)
+                            </span>
+                            <div class="progress-bar-container">
+                                <div class="progress-bar" style="width: {downloadProgress}%"></div>
+                            </div>
                         {:else if selectedFileIds.length === 1}
                             Pobierz
                         {:else}
@@ -708,6 +1177,33 @@
                     {/if}
                 </div>
             {/if}
+
+            {#if isUploading}
+                <div class="upload-progress-bar" class:upload-error={uploadError}>
+                    <div class="upload-progress-content">
+                        <svg class="feather">
+                            {#if uploadError}
+                                <use href="{feather}#alert-circle"/>
+                            {:else}
+                                <use href="{feather}#upload-cloud"/>
+                            {/if}
+                        </svg>
+                        <div class="upload-progress-info">
+                            {#if uploadError}
+                                <span class="upload-error-text">{uploadError}</span>
+                            {:else}
+                                <span class="upload-progress-text">
+                                    Przesyłanie ({uploadCurrentFile}/{uploadTotalFiles}): {uploadFileName}
+                                </span>
+                                <div class="progress-bar-container">
+                                    <div class="progress-bar" style="width: {uploadProgress}%"></div>
+                                </div>
+                                <span class="upload-progress-percent">{uploadProgress}%</span>
+                            {/if}
+                        </div>
+                    </div>
+                </div>
+            {/if}
         </div>
     </div>
 </div>
@@ -723,10 +1219,20 @@
     .upload-button {
         display: flex;
         flex-direction: row;
+        align-items: center;
+        justify-content: center;
+        gap: 12px;
+        width: 100%;
+        text-align: center;
+        cursor: pointer;
+        padding: 12px 16px;
     }
 
     .upload-label-text {
-        padding-left: 1rem;
+        padding-left: 0;
+        display: flex;
+        align-items: center;
+        line-height: 1;
     }
 
     .feather {
@@ -745,6 +1251,7 @@
 
     .upload {
         cursor: pointer;
+        justify-content: center;
     }
 
     .feather.file {
@@ -769,8 +1276,9 @@
         width: 100%;
         display: flex;
         align-items: center;
+        justify-content: center;
         gap: 16px;
-        padding: 12px 16px;
+        padding: 0;
         border-radius: 8px;
         text-decoration: none;
         color: var(--text-secondary);
@@ -886,6 +1394,18 @@
         display: flex;
         justify-content: center;
         align-items: center;
+    }
+
+    .header-actions {
+        font-size: 0.75rem;
+        color: var(--text-secondary);
+        text-align: center;
+        font-weight: 600;
+        text-transform: uppercase;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        width: 48px;
     }
 
     .header-date {
@@ -1029,9 +1549,10 @@
         gap: 8px;
     }
 
-    .nav-links svg {
-        color: var(--text-secondary);
-        transition: color 0.2s ease;
+        .admin-link {
+        text-decoration: none;
+        display: block;
+        width: 100%;
     }
 
     .nav-links li button {
@@ -1161,7 +1682,7 @@
 
     .file-item {
         display: grid;
-        grid-template-columns: auto auto auto 1fr 150px 100px;
+        grid-template-columns: auto auto auto 1fr 150px 100px 48px;
         align-items: center;
         padding: 12px 16px;
         border-radius: 8px;
@@ -1188,6 +1709,28 @@
 
     .file-size {
         width: 100px;
+    }
+
+    .versions-btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 36px;
+        height: 36px;
+        border-radius: 8px;
+        color: var(--text-secondary);
+        transition: all 0.2s ease;
+    }
+
+    .versions-btn:hover {
+        background-color: var(--hover-bg);
+        color: #fff;
+    }
+
+    .versions-btn .feather {
+        width: 18px;
+        height: 18px;
+        stroke: currentColor;
     }
 
     .file-item:hover {
@@ -1344,6 +1887,189 @@
         height: 16px;
     }
 
+    .versions-overlay {
+        position: fixed;
+        inset: 0;
+        background-color: rgba(0, 0, 0, 0.6);
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        z-index: 200;
+        padding: 24px;
+    }
+
+    .versions-modal {
+        width: 100%;
+        max-width: 720px;
+        background-color: var(--primary-bg);
+        border: 1px solid var(--border-color);
+        border-radius: 16px;
+        box-shadow: 0 24px 48px rgba(0, 0, 0, 0.4);
+        padding: 24px;
+        display: flex;
+        flex-direction: column;
+        gap: 16px;
+    }
+
+    .versions-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+    }
+
+    .versions-header h3 {
+        font-size: 1.25rem;
+        font-weight: 600;
+    }
+
+    .versions-subtitle {
+        font-size: 0.875rem;
+        color: var(--text-secondary);
+    }
+
+    .versions-close {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 36px;
+        height: 36px;
+        border-radius: 8px;
+        color: var(--text-secondary);
+        transition: all 0.2s ease;
+    }
+
+    .versions-close:hover {
+        background-color: var(--hover-bg);
+        color: #fff;
+    }
+
+    .versions-state {
+        padding: 16px;
+        border-radius: 12px;
+        background-color: rgba(255, 255, 255, 0.05);
+        color: var(--text-secondary);
+        text-align: center;
+    }
+
+    .versions-state.versions-error {
+        color: #fff;
+        background-color: rgba(220, 38, 38, 0.3);
+    }
+
+    .versions-list {
+        list-style: none;
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+        max-height: 360px;
+        overflow-y: auto;
+        padding-right: 4px;
+    }
+
+    .version-item {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+        padding: 12px 16px;
+        border-radius: 12px;
+        background-color: rgba(255, 255, 255, 0.04);
+        border: 1px solid transparent;
+    }
+
+    .version-item.is-current {
+        border-color: rgba(157, 115, 255, 0.6);
+        background-color: rgba(157, 115, 255, 0.12);
+    }
+
+    .version-main {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+    }
+
+    .version-badge {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-weight: 600;
+    }
+
+    .version-current {
+        padding: 2px 8px;
+        border-radius: 999px;
+        font-size: 0.75rem;
+        background-color: rgba(157, 115, 255, 0.3);
+        color: #fff;
+    }
+
+    .version-meta {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+        color: var(--text-secondary);
+        font-size: 0.875rem;
+    }
+
+    .version-actions {
+        display: flex;
+        gap: 12px;
+        flex-wrap: wrap;
+    }
+
+    .version-action {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 8px 12px;
+        border-radius: 8px;
+        background-color: rgba(255, 255, 255, 0.08);
+        color: #fff;
+        transition: all 0.2s ease;
+    }
+
+    .version-action:hover {
+        background-color: rgba(255, 255, 255, 0.18);
+    }
+
+    .version-action.danger {
+        background-color: rgba(220, 38, 38, 0.4);
+    }
+
+    .version-action.danger:hover {
+        background-color: rgba(220, 38, 38, 0.6);
+    }
+
+    .version-action:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+    }
+
+    .versions-progress {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        padding: 12px 16px;
+        border-radius: 12px;
+        background-color: rgba(255, 255, 255, 0.05);
+    }
+
+    .versions-progress-text {
+        font-size: 0.875rem;
+        color: #fff;
+        font-weight: 500;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .versions-progress-percent {
+        font-size: 0.75rem;
+        color: rgba(255, 255, 255, 0.8);
+        font-weight: 600;
+        text-align: right;
+    }
+
     @keyframes expand-confirm {
         from {
             opacity: 0;
@@ -1418,7 +2144,7 @@
         }
 
         .file-item {
-            grid-template-columns: auto auto auto 1fr 150px 80px;
+            grid-template-columns: auto auto auto 1fr 150px 80px 40px;
         }
 
         .file-date,
@@ -1499,7 +2225,7 @@
         }
 
         .file-item {
-            grid-template-columns: auto auto auto 1fr 150px 80px;
+            grid-template-columns: auto auto auto 1fr 150px 80px 40px;
             gap: 12px;
             padding: 12px 16px;
             min-width: 800px;
@@ -1508,6 +2234,120 @@
         .file-date,
         .file-size {
             display: block;
+        }
+    }
+
+    /* Progress bar styles */
+    .progress-bar-container {
+        width: 100%;
+        height: 4px;
+        background-color: rgba(255, 255, 255, 0.2);
+        border-radius: 2px;
+        overflow: hidden;
+        margin-top: 4px;
+    }
+
+    .progress-bar {
+        height: 100%;
+        background-color: #fff;
+        border-radius: 2px;
+        transition: width 0.15s ease-out;
+    }
+
+    .download-text {
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        max-width: 200px;
+    }
+
+    .download-button .progress-bar-container {
+        width: 100px;
+        margin-left: 8px;
+        margin-top: 0;
+    }
+
+    /* Upload progress bar */
+    .upload-progress-bar {
+        position: absolute;
+        top: 80px;
+        left: 50%;
+        transform: translateX(-50%);
+        background-color: var(--primary-purple);
+        border-radius: 12px;
+        padding: 16px 24px;
+        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+        z-index: 100;
+        animation: slide-down 0.3s ease-out forwards;
+        min-width: 300px;
+        max-width: 500px;
+    }
+
+    .upload-progress-content {
+        display: flex;
+        align-items: center;
+        gap: 16px;
+    }
+
+    .upload-progress-content .feather {
+        width: 32px;
+        height: 32px;
+        stroke: #fff;
+        flex-shrink: 0;
+    }
+
+    .upload-progress-info {
+        flex-grow: 1;
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+    }
+
+    .upload-progress-text {
+        font-size: 0.875rem;
+        color: #fff;
+        font-weight: 500;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        max-width: 350px;
+    }
+
+    .upload-progress-percent {
+        font-size: 0.75rem;
+        color: rgba(255, 255, 255, 0.8);
+        font-weight: 600;
+    }
+
+    .upload-progress-bar .progress-bar-container {
+        height: 6px;
+        background-color: rgba(255, 255, 255, 0.3);
+    }
+
+    .upload-progress-bar .progress-bar {
+        background: linear-gradient(90deg, #fff, rgba(255, 255, 255, 0.9));
+    }
+
+    /* Upload error styles */
+    .upload-progress-bar.upload-error {
+        background-color: #dc2626;
+    }
+
+    .upload-error-text {
+        font-size: 0.875rem;
+        color: #fff;
+        font-weight: 500;
+        word-break: break-word;
+    }
+
+    @keyframes slide-down {
+        from {
+            opacity: 0;
+            transform: translate(-50%, -20px);
+        }
+        to {
+            opacity: 1;
+            transform: translate(-50%, 0);
         }
     }
 </style>
