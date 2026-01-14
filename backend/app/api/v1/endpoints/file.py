@@ -208,7 +208,7 @@ async def download_file_version(
     """
     try:
         ip_address = request.client.host if request.client else None
-        file_obj, filename = await FileService(db).download_file_version(
+        file_obj, filename, file_size = await FileService(db).download_file_version(
             file_id=file_id,
             version_number=version_number,
             username=user.username,
@@ -218,7 +218,10 @@ async def download_file_version(
         return StreamingResponse(
             file_obj,
             media_type="application/octet-stream",
-            headers={"Content-Disposition": f"attachment; filename*=UTF-8''{filename}"}
+            headers={
+                "Content-Disposition": f"attachment; filename*=UTF-8''{filename}",
+                "Content-Length": str(file_size)
+            }
         )
     except HTTPException:
         raise

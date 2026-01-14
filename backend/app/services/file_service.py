@@ -796,7 +796,15 @@ class FileService:
                     }
                 )
 
-                return file_obj, file_record.name
+                def iter_file():
+                    chunk_size = 1024 * 1024  # 1 MB chunks
+                    while True:
+                        chunk = file_obj.read(chunk_size)
+                        if not chunk:
+                            break
+                        yield chunk
+
+                return iter_file(), file_record.name, version.size
             except Exception as e:
                 raise HTTPException(
                     status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
